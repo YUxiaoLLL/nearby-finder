@@ -6,7 +6,7 @@
 
 [English](README.md) · [兼容表 / Compatibility](docs/COMPATIBILITY.md) · [隐私 / Privacy](docs/PRIVACY.md) · [参与测试 / Testing](docs/TESTING.md)
 
-> **状态：V0.10 开发预览，源码可自编译。尚无公开 TestFlight 或 App Store 安装入口。**
+> **状态：V0.11 开发预览，源码可自编译。尚无公开 TestFlight 或 App Store 安装入口。**
 > 中英文说明已提供；当前 App 界面主要为简体中文。演示视频待补充，见[视频说明](docs/media/README.md)。
 
 ## 为什么写这个工具
@@ -40,7 +40,7 @@ Apple Pencil Pro 和支持的 AirPods 已有 Apple 查找，应优先使用。�
 
 ## 当前验证情况
 
-仅 **Suunto 9 Peak Pro** 已有作者的信号与通知辅助真机测试：前台、锁屏下均曾触发手表提醒。**V0.10 品类与位置改动尚需完整真机回归**；其他型号仍是候选，不是已支持列表。详见[兼容表](docs/COMPATIBILITY.md)。
+仅 **Suunto 9 Peak Pro** 已有作者的信号与通知辅助真机测试：前台、锁屏下均曾触发手表提醒。**V0.11 品类与位置改动尚需完整真机回归**；其他型号仍是候选，不是已支持列表。详见[兼容表](docs/COMPATIBILITY.md)。
 
 ## 自己构建
 
@@ -71,3 +71,5 @@ bash Check.command
 ## 许可与品牌
 
 代码采用 [MIT License](LICENSE)。Suunto 等名称仅用于说明测试设备；本项目独立开发，与相关品牌无隶属或合作关系。界面名“随手寻 / Nearby Finder”为工作名。
+
+V0.11：默认自动读取前台寻找时的手机定位（需授权）；位置区简化为一张地图。手动对齐可对附近 500 米内后续自动记录应用显示校正，保留原始坐标；不能把无对应原始定位的旧手动点直接当作校准基准。详见 [定位说明](docs/LOCATION_FIXES.md)。

@@ -1,5 +1,16 @@
 # Changelog
 
+## V0.11 — automatic location and local alignment
+
+- Show one primary location map; keep raw evidence and controls in details.
+- Start location permission flow during an explicit search unless recording was disabled.
+- Save fresh qualifying system fixes without requiring five rapid callbacks. Keep freshness, signal timing, accuracy and jump checks.
+- Apply device-local manual map alignment to subsequent automatic records within 500m of its raw anchor; preserve raw GPS and provide reset. Reject mismatched historical evidence and corrections over 2km.
+- Resume old per-device paused sampling states; explicit global off remains respected.
+- Add regression checks for first-fix recording, jump protection and persistent, device-isolated local correction.
+- Generic iOS build and policy checks passed; physical-device location accuracy still requires testing.
+
+
 ## 0.10.0 — Categories and location references
 
 - Add stylus / Apple Pencil, mouse and keyboard categories, grouped collections and capability notes. New categories are not hardware compatibility claims.

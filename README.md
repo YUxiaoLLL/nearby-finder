@@ -8,7 +8,7 @@ An experimental native iOS app that uses Bluetooth signal trends to narrow your 
 
 [简体中文](README.zh-CN.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
 
-> **Status: V0.10 development preview. Source builds only; no public TestFlight or App Store download yet.**
+> **Status: V0.11 development preview. Source builds only; no public TestFlight or App Store download yet.**
 > Documentation is bilingual. The current app UI is primarily Simplified Chinese. A real-device demo video is planned; see [media notes](docs/media/README.md).
 
 ## Why I built this
@@ -24,8 +24,8 @@ That became Nearby Finder: a small, independent tool built around a real frustra
 - Observe smoothed signal strength and increasing/decreasing trends.
 - Manually compare samples taken along routes you actually walk.
 - Try notification-assisted watch alerts at 5, 10, 15 and 20 seconds on compatible setups.
-- Optionally save the **phone's** recent, stable location when a valid signal is received. Reject stale, coarse and jumping samples; reported uncertainty is not an accuracy guarantee.
-- Keep a separate user-confirmed map reference and room/floor note. It does not expire or get overwritten by automatic GPS updates; it is historical, not live device tracking.
+- Automatically record a fresh **phone** location around a valid signal while searching, with location permission. Fresh qualifying fixes no longer wait for five rapid callbacks; sudden jumps require confirmation.
+- Correct a misplaced map pin with manual alignment. Matching raw phone fixes establish a local display correction for subsequent records within 500m; raw GPS remains intact. Historical manual-only points cannot establish an offset without a matching fix.
 - Local device and location records, no account, ads or analytics SDK.
 
 ## Limitations
@@ -42,7 +42,7 @@ Apple Pencil Pro and supported AirPods already have Apple Find My features; use 
 
 ## Tested hardware
 
-Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.10 category and location changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
+Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.11 category and location changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
 
 ## Build from source
 
