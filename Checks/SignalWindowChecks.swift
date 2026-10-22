@@ -236,3 +236,21 @@ func checkLocationEvidence() {
     print("PASS: fresh session fixes, stable location dwell, jumps/gaps/stale/future/invalid rejection, persistent manual reference identity and categories migration")
 }
 checkLocationEvidence()
+
+func checkSignalContextWithoutGPS() {
+    let t = Date(timeIntervalSince1970: 10000)
+    let evidence = PlaceSignalEvidence(deviceID: "one", time: t, rssi: -70, source: "test")
+    var history = PlaceSignalHistory()
+    assert(history.observe(evidence, deviceID: "one"))
+    history.stopLive()
+    assert(history.live == nil && history.latest?.time == t)
+    let saved = try! JSONEncoder().encode(history.latest!)
+    let decoded = try! JSONDecoder().decode(PlaceSignalEvidence.self, from: saved)
+    let restored = PlaceSignalHistory(restored: decoded, deviceID: "one")
+    assert(restored.live == nil && restored.latest?.time == t)
+    assert(PlaceSignalHistory(restored: decoded, deviceID: "two").latest == nil)
+    assert(!history.observe(evidence, deviceID: "two"))
+    assert(!history.observe(PlaceSignalEvidence(deviceID: "one", time: t.addingTimeInterval(-1), rssi: -60, source: "test"), deviceID: "one"))
+    print("PASS: manual-confirmation signal context survives pause/restart without GPS; device isolation and older-event rejection")
+}
+checkSignalContextWithoutGPS()
