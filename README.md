@@ -1,61 +1,67 @@
-# 随手寻 · Nearby Finder
+# Nearby Finder
 
-**手表明明还连着，却不知道藏在哪里？**
+**Find your nearby watch, one step at a time.**
 
-一个开发中的原生 iOS 工具：通过蓝牙信号趋势缩小查找范围，在已验证的兼容手表上尝试通知辅助提醒。起源于作者寻找自己的 Suunto 9 Peak Pro。
+**Your watch is still connected, but you cannot find where it is hiding?**
 
-[English](README.en.md) · [兼容表 / Compatibility](docs/COMPATIBILITY.md) · [隐私 / Privacy](docs/PRIVACY.md) · [参与测试 / Testing](docs/TESTING.md)
+An experimental native iOS app that uses Bluetooth signal trends to narrow your search, with notification-assisted alerts on tested compatible watches. Started as a tool to find the author's Suunto 9 Peak Pro.
 
-> **状态：V0.9 开发预览，源码可自编译。尚无公开 TestFlight 或 App Store 安装入口。**
-> 中英文说明已提供；当前 App 界面主要为简体中文。演示视频待补充，见[视频说明](docs/media/README.md)。
+[简体中文](README.zh-CN.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
 
-## 它能做什么
+> **Status: V0.9 development preview. Source builds only; no public TestFlight or App Store download yet.**
+> Documentation is bilingual. The current app UI is primarily Simplified Chinese. A real-device demo video is planned; see [media notes](docs/media/README.md).
 
-- 收藏自己的 BLE 物品，记录昵称、类别、常放位置，逐件寻找。
-- 展示平滑后的信号强弱和增强／减弱趋势，辅助缩小寻找区域。
-- 手动比较实际移动路线的采样结果。
-- 在兼容手表上，通过 iOS 通知转发尝试发出提醒：第 5、10、15、20 秒各一次。
-- 可选保存收到有效信号时**手机**的位置、时间与精度，作为下次寻找的起点。
-- 本机保存收藏与位置，无需账号、无广告或分析 SDK。
+## Why I built this
 
-## 先读清楚这些限制
+I started this project after I couldn't find my own **Suunto 9 Peak Pro**. I wanted a practical way to narrow the search with my phone, then try an audible reminder on the watch.
 
-- **不是精确定位：**不显示米数或测得的前后左右；圆环只表示信号强弱。
-- **并非全蓝牙兼容：**设备必须有电、在可发现／连接范围内并提供有效信号。休眠、不广播或更换标识可能阻止寻找。
-- **并非远程追踪：**不能在设备没电或超出范围后实时追踪；最后位置不是手表自身 GPS，也不是众包寻找网络。
-- **提醒不是通用响铃命令：**目前利用系统通知转发，是否发声取决于系统配对、权限和手表设置；可能同时提醒其他配件，不能按收藏 UUID 定向投递。无法远程调大音量。
-- 只添加和寻找自己拥有的设备。
+That became Nearby Finder: a small, independent tool built around a real frustration. It started with one watch and is growing through actual device testing—not promises that every Bluetooth device will work.
 
-## 当前验证情况
+## Features
 
-仅 **Suunto 9 Peak Pro** 已有作者的信号与通知辅助真机测试：前台、锁屏下均曾触发手表提醒。**V0.9 新增收藏与界面尚需完整真机回归**；其他型号仍是候选，不是已支持列表。详见[兼容表](docs/COMPATIBILITY.md)。
+- Save your own BLE devices with nicknames, categories and usual storage places; search one at a time.
+- Observe smoothed signal strength and increasing/decreasing trends.
+- Manually compare samples taken along routes you actually walk.
+- Try notification-assisted watch alerts at 5, 10, 15 and 20 seconds on compatible setups.
+- Optionally save the **phone's** location, timestamp and reported accuracy when a valid signal is received.
+- Local device and location records, no account, ads or analytics SDK.
 
-## 自己构建
+## Limitations
 
-需要 Mac、完整版 Xcode 与 iPhone（工程最低 iOS 16）。模拟器不能替代蓝牙真机测试。
+- **No precision ranging or bearing.** No meter estimates or measured left/right arrows. The ring represents signal strength only.
+- **Not every Bluetooth device works.** It must be powered and discoverable or connectable within range. Sleeping devices, stopped advertising and changing identifiers may prevent finding.
+- **No remote or crowdsourced tracking.** Last location is the phone's position, not the watch's GPS. A powered-off or out-of-range device cannot be tracked live.
+- **Alerts are not a universal ring command.** iOS notification forwarding depends on pairing, permissions and watch settings, may notify other accessories, and cannot be addressed to a saved UUID. Remote volume control is unavailable.
+- Only add and search devices you own.
 
-1. 克隆或下载此仓库，打开 `SuuntoFinder.xcodeproj`。
-2. 在 Target → Signing & Capabilities 选择自己的 Team，将 Bundle Identifier 改成自己的唯一标识。仓库已移除作者 Team，`org.example.nearbyfinder` 只是示例。
-3. 选择 iPhone，允许开发所需设置，Run。
-4. 允许蓝牙，进入“添加附近设备”，确认属于自己的设备后收藏，再选择寻找。
-5. 通知辅助需要允许通知，并先在系统／官方 App 中完成手表配对和通知转发设置；位置功能按需授权。
+## Tested hardware
 
-免费个人签名有期限等限制，不能当作普通用户的长期安装渠道。不要从陌生来源安装描述文件或提供 Apple ID 密码。
+Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.9 library and layout changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
 
-运行检查：
+## Build from source
+
+Requires a Mac, full Xcode and a physical iPhone. Project deployment target: iOS 16. A simulator cannot validate Bluetooth behavior.
+
+1. Clone/download this repository and open `SuuntoFinder.xcodeproj`.
+2. In Target → Signing & Capabilities, select your own Team and a unique Bundle Identifier. The author's Team has been removed; `org.example.nearbyfinder` is a sample identifier.
+3. Select your iPhone and Run, completing normal development setup as required.
+4. Allow Bluetooth. Open “添加附近设备” (add nearby device), confirm ownership and save your device, then start searching.
+5. Alerts require notification permission and an existing working watch/system notification-forwarding setup. Location permission is optional.
+
+Free personal signing has time and other limitations; it is not a convenient permanent distribution channel. Do not share your Apple ID password or install untrusted profiles.
 
 ```sh
 bash Check.command
 ```
 
-包含信号窗口、过期处理、路线比较、触发条件、位置策略、收藏迁移和标识匹配的逻辑检查，再执行未签名 iOS 构建。脚本生成的 `BuildCheck.log` 不纳入版本控制。[验证范围](docs/VALIDATION.md)
+Runs logic checks for signal filtering, stale state, routes, trigger conditions, location policies, library migration and identity matching, then an unsigned iOS build. Generated logs are ignored. See [validation scope](docs/VALIDATION.md).
 
-## 反馈与贡献
+## Feedback and roadmap
 
-欢迎测试自己的型号，并使用 Issue 模板记录型号、固件、iOS、信号与提醒结果。**受控藏表测试和真实遗失找回请分开注明。** 不要公开坐标、住址、完整序列号、蓝牙 UUID 或未经检查的诊断日志。[贡献指南](CONTRIBUTING.md)
+Use the Issue templates to report watch model, firmware, iOS and separate signal/alert outcomes. Distinguish a controlled hiding test from a real recovery. Never post coordinates, home addresses, full serial numbers, Bluetooth UUIDs or unreviewed diagnostic logs. See [contributing](CONTRIBUTING.md).
 
-下一步：完成 Suunto 真机回归 → 发布真实演示 → 招募小批 TestFlight 测试者 → 逐型号验证 → 评估 App Store 首发。暂不承诺发布时间。
+Next: hardware regression → real demo → a small TestFlight group → model-by-model validation → evaluate an App Store release. No release date promised.
 
-## 许可与品牌
+## License and brands
 
-代码采用 [MIT License](LICENSE)。Suunto 等名称仅用于说明测试设备；本项目独立开发，与相关品牌无隶属或合作关系。界面名“随手寻 / Nearby Finder”为工作名。
+[MIT License](LICENSE). Product names identify test hardware only. This independent project is not affiliated with or endorsed by Suunto or other device manufacturers. “Nearby Finder / 随手寻” is a working name.

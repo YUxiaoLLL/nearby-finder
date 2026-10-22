@@ -1,13 +1,21 @@
-# Nearby Finder · 随手寻
+# Nearby Finder
+
+**Find your nearby watch, one step at a time.**
 
 **Your watch is still connected, but you cannot find where it is hiding?**
 
 An experimental native iOS app that uses Bluetooth signal trends to narrow your search, with notification-assisted alerts on tested compatible watches. Started as a tool to find the author's Suunto 9 Peak Pro.
 
-[简体中文](README.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
+[简体中文](README.zh-CN.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
 
 > **Status: V0.9 development preview. Source builds only; no public TestFlight or App Store download yet.**
 > Documentation is bilingual. The current app UI is primarily Simplified Chinese. A real-device demo video is planned; see [media notes](docs/media/README.md).
+
+## Why I built this
+
+I started this project after I couldn't find my own **Suunto 9 Peak Pro**. I wanted a practical way to narrow the search with my phone, then try an audible reminder on the watch.
+
+That became Nearby Finder: a small, independent tool built around a real frustration. It started with one watch and is growing through actual device testing—not promises that every Bluetooth device will work.
 
 ## Features
 
