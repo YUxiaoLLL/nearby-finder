@@ -1,6 +1,6 @@
 # Nearby Finder
 
-**Find your nearby watch, one step at a time.**
+**Find your nearby Bluetooth belongings, one step at a time.**
 
 **Your watch is still connected, but you cannot find where it is hiding?**
 
@@ -8,7 +8,7 @@ An experimental native iOS app that uses Bluetooth signal trends to narrow your 
 
 [简体中文](README.zh-CN.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
 
-> **Status: V0.9 development preview. Source builds only; no public TestFlight or App Store download yet.**
+> **Status: V0.10 development preview. Source builds only; no public TestFlight or App Store download yet.**
 > Documentation is bilingual. The current app UI is primarily Simplified Chinese. A real-device demo video is planned; see [media notes](docs/media/README.md).
 
 ## Why I built this
@@ -19,11 +19,13 @@ That became Nearby Finder: a small, independent tool built around a real frustra
 
 ## Features
 
-- Save your own BLE devices with nicknames, categories and usual storage places; search one at a time.
+- Organize watches, headphones, Apple Pencil / styluses, Bluetooth mice, keyboards and other BLE belongings with nicknames and usual storage places. Categories are organizational labels, not model compatibility guarantees.
+- Search one device at a time, only when this app can actually discover or connect to it.
 - Observe smoothed signal strength and increasing/decreasing trends.
 - Manually compare samples taken along routes you actually walk.
 - Try notification-assisted watch alerts at 5, 10, 15 and 20 seconds on compatible setups.
-- Optionally save the **phone's** location, timestamp and reported accuracy when a valid signal is received.
+- Optionally save the **phone's** recent, stable location when a valid signal is received. Reject stale, coarse and jumping samples; reported uncertainty is not an accuracy guarantee.
+- Keep a separate user-confirmed map reference and room/floor note. It does not expire or get overwritten by automatic GPS updates; it is historical, not live device tracking.
 - Local device and location records, no account, ads or analytics SDK.
 
 ## Limitations
@@ -34,9 +36,13 @@ That became Nearby Finder: a small, independent tool built around a real frustra
 - **Alerts are not a universal ring command.** iOS notification forwarding depends on pairing, permissions and watch settings, may notify other accessories, and cannot be addressed to a saved UUID. Remote volume control is unavailable.
 - Only add and search devices you own.
 
+## Categories and existing alternatives
+
+Apple Pencil Pro and supported AirPods already have Apple Find My features; use those first. Older styluses and other Bluetooth devices may sleep or stop advertising. Mice and keyboards connected to another host, classic Bluetooth devices and proprietary 2.4 GHz receivers may be invisible here. New category names do not mean these models are supported. See [category research](docs/CATEGORY_RESEARCH.md) and [location changes / test checklist](docs/LOCATION_FIXES.md).
+
 ## Tested hardware
 
-Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.9 library and layout changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
+Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.10 category and location changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
 
 ## Build from source
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0 — Categories and location references
+
+- Add stylus / Apple Pencil, mouse and keyboard categories, grouped collections and capability notes. New categories are not hardware compatibility claims.
+- Make manual map confirmation visible without requiring a live GPS fix or active scan when signal history exists.
+- Save manual historical references separately, with timestamps and room/floor notes; no silent expiration or automatic overwrite.
+- Reject stale / coarse / jumping phone fixes, require stable samples and tight signal association. Mark questionable automatic records and pause updates until explicitly retried.
+- Preserve original automatic records; do not apply guessed datum conversions or claim accurate item coordinates.
+- Add category research and location regression guidance. Physical-device verification remains pending.
+
+
 ## 0.9.0 — Source preview
 
 - Center the signal ring within its container.
