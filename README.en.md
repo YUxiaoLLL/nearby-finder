@@ -1,0 +1,59 @@
+# Nearby Finder · 随手寻
+
+**Your watch is still connected, but you cannot find where it is hiding?**
+
+An experimental native iOS app that uses Bluetooth signal trends to narrow your search, with notification-assisted alerts on tested compatible watches. Started as a tool to find the author's Suunto 9 Peak Pro.
+
+[简体中文](README.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
+
+> **Status: V0.9 development preview. Source builds only; no public TestFlight or App Store download yet.**
+> Documentation is bilingual. The current app UI is primarily Simplified Chinese. A real-device demo video is planned; see [media notes](docs/media/README.md).
+
+## Features
+
+- Save your own BLE devices with nicknames, categories and usual storage places; search one at a time.
+- Observe smoothed signal strength and increasing/decreasing trends.
+- Manually compare samples taken along routes you actually walk.
+- Try notification-assisted watch alerts at 5, 10, 15 and 20 seconds on compatible setups.
+- Optionally save the **phone's** location, timestamp and reported accuracy when a valid signal is received.
+- Local device and location records, no account, ads or analytics SDK.
+
+## Limitations
+
+- **No precision ranging or bearing.** No meter estimates or measured left/right arrows. The ring represents signal strength only.
+- **Not every Bluetooth device works.** It must be powered and discoverable or connectable within range. Sleeping devices, stopped advertising and changing identifiers may prevent finding.
+- **No remote or crowdsourced tracking.** Last location is the phone's position, not the watch's GPS. A powered-off or out-of-range device cannot be tracked live.
+- **Alerts are not a universal ring command.** iOS notification forwarding depends on pairing, permissions and watch settings, may notify other accessories, and cannot be addressed to a saved UUID. Remote volume control is unavailable.
+- Only add and search devices you own.
+
+## Tested hardware
+
+Only the author's **Suunto 9 Peak Pro** has prior signal and notification-assistance results, including foreground and locked-phone alerts. **V0.9 library and layout changes still require full hardware regression.** Other models are research candidates, not supported-device claims. See the [compatibility matrix](docs/COMPATIBILITY.md).
+
+## Build from source
+
+Requires a Mac, full Xcode and a physical iPhone. Project deployment target: iOS 16. A simulator cannot validate Bluetooth behavior.
+
+1. Clone/download this repository and open `SuuntoFinder.xcodeproj`.
+2. In Target → Signing & Capabilities, select your own Team and a unique Bundle Identifier. The author's Team has been removed; `org.example.nearbyfinder` is a sample identifier.
+3. Select your iPhone and Run, completing normal development setup as required.
+4. Allow Bluetooth. Open “添加附近设备” (add nearby device), confirm ownership and save your device, then start searching.
+5. Alerts require notification permission and an existing working watch/system notification-forwarding setup. Location permission is optional.
+
+Free personal signing has time and other limitations; it is not a convenient permanent distribution channel. Do not share your Apple ID password or install untrusted profiles.
+
+```sh
+bash Check.command
+```
+
+Runs logic checks for signal filtering, stale state, routes, trigger conditions, location policies, library migration and identity matching, then an unsigned iOS build. Generated logs are ignored. See [validation scope](docs/VALIDATION.md).
+
+## Feedback and roadmap
+
+Use the Issue templates to report watch model, firmware, iOS and separate signal/alert outcomes. Distinguish a controlled hiding test from a real recovery. Never post coordinates, home addresses, full serial numbers, Bluetooth UUIDs or unreviewed diagnostic logs. See [contributing](CONTRIBUTING.md).
+
+Next: hardware regression → real demo → a small TestFlight group → model-by-model validation → evaluate an App Store release. No release date promised.
+
+## License and brands
+
+[MIT License](LICENSE). Product names identify test hardware only. This independent project is not affiliated with or endorsed by Suunto or other device manufacturers. “Nearby Finder / 随手寻” is a working name.
