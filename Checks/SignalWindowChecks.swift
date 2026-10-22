@@ -1,0 +1,178 @@
+import Foundation
+
+func checkSignalWindow() {
+    let t = Date(timeIntervalSince1970:1000)
+    var s = SignalWindow()
+    assert(!s.add(127,source:"广播",at:t))
+    assert(!s.add(0,source:"广播",at:t))
+    assert(s.value(at:t) == nil)
+    for i in 0..<5 { assert(s.add(-80,source:"广播",at:t.addingTimeInterval(Double(i)))) }
+    for i in 5..<10 { assert(s.add(-60,source:"广播",at:t.addingTimeInterval(Double(i)))) }
+    assert(s.value(at:t.addingTimeInterval(10)) == -60)
+    assert(s.trend(at:t.addingTimeInterval(10)).contains("增强"))
+    assert(s.value(at:t.addingTimeInterval(18)) == nil)
+    assert(s.add(-45,source:"连接后 readRSSI",at:t.addingTimeInterval(19)))
+    assert(s.samples.count == 1) // sources are never mixed for a trend
+    assert(s.trend(at:t.addingTimeInterval(19)).contains("积累"))
+    var history = SignalWindow()
+    for i in 0..<25 { _ = history.add(i < 15 ? -80 : -60, source: "广播", at: t.addingTimeInterval(Double(i))) }
+    assert(history.value(at: t.addingTimeInterval(5)) == -80) // no future samples in chart
+    assert(history.delta(at: t.addingTimeInterval(24)) == 20)
+    assert(history.delta(at: t.addingTimeInterval(33)) == nil)
+    var falling = SignalWindow()
+    var noisy = SignalWindow()
+    for i in 0..<20 {
+        _ = falling.add(i < 13 ? -55 : -80, source: "广播", at: t.addingTimeInterval(Double(i)))
+        _ = noisy.add(i == 19 ? -30 : -75, source: "广播", at: t.addingTimeInterval(Double(i)))
+    }
+    assert(falling.delta(at: t.addingTimeInterval(19)) == -25)
+    assert(falling.trend(at: t.addingTimeInterval(19)).contains("减弱"))
+    assert(noisy.delta(at: t.addingTimeInterval(19)) == 0)
+    assert(noisy.value(at: t.addingTimeInterval(19)) == -75)
+    var burst = SignalWindow()
+    for i in 0..<100 { _ = burst.add(-50, source: "广播", at: t.addingTimeInterval(Double(i) / 100)) }
+    assert(burst.delta(at: t.addingTimeInterval(1)) == nil)
+    for i in 25..<100 { _ = history.add(-70, source: "广播", at: t.addingTimeInterval(Double(i))) }
+    assert(history.samples.count <= 61)
+    s.reset()
+    assert(s.last == nil)
+    print("PASS: invalid RSSI, median, rising/falling/noisy trends, stale signal, source isolation, historical smoothing, burst rejection, 60s retention, reset")
+}
+checkSignalWindow()
+
+func checkCloseRangeGate() {
+    let start = Date(timeIntervalSince1970: 2000)
+    var gate = CloseRangeGate()
+    for second in 0..<5 {
+        let now = start.addingTimeInterval(Double(second))
+        assert(!gate.update(value: -60, sampleTime: now, threshold: -65, at: now))
+    }
+    let entered = start.addingTimeInterval(5)
+    assert(gate.update(value: -60, sampleTime: entered, threshold: -65, at: entered))
+    let smallDip = start.addingTimeInterval(6)
+    assert(gate.update(value: -68, sampleTime: smallDip, threshold: -65, at: smallDip))
+    let outside = start.addingTimeInterval(7)
+    assert(!gate.update(value: -71, sampleTime: outside, threshold: -65, at: outside))
+    for second in 8...13 {
+        let now = start.addingTimeInterval(Double(second))
+        _ = gate.update(value: -60, sampleTime: now, threshold: -65, at: now)
+    }
+    assert(gate.inside)
+    assert(!gate.update(value: -60, sampleTime: start.addingTimeInterval(13), threshold: -65, at: start.addingTimeInterval(16)))
+    // One sample cannot establish a five-second dwell just by reusing it.
+    gate.reset()
+    assert(!gate.update(value: -60, sampleTime: start, threshold: -65, at: start))
+    assert(!gate.update(value: -60, sampleTime: start, threshold: -65, at: start.addingTimeInterval(5)))
+    // A gap restarts the dwell.
+    assert(!gate.update(value: -60, sampleTime: start.addingTimeInterval(10), threshold: -65, at: start.addingTimeInterval(10)))
+    assert(!gate.update(value: nil, sampleTime: nil, threshold: -65, at: start.addingTimeInterval(11)))
+    print("PASS: near-zone dwell, hysteresis, stale exit, repeated-sample rejection, interrupted samples")
+}
+checkCloseRangeGate()
+
+func checkLastPlaceAssociation() {
+    let t = Date(timeIntervalSince1970: 3000)
+    func accepted(locationOffset: Double, signalOffset: Double = 0, nowOffset: Double = 0, accuracy: Double = 30) -> Bool {
+        LastPlacePolicy.canAssociate(locationTime: t.addingTimeInterval(locationOffset), accuracy: accuracy,
+            signalTime: t.addingTimeInterval(signalOffset), at: t.addingTimeInterval(nowOffset))
+    }
+    assert(accepted(locationOffset: -2))
+    assert(!accepted(locationOffset: -5, accuracy: 5000)) // coarse fixes no longer become precise-looking pins
+    assert(accepted(locationOffset: -1, accuracy: 50))
+    assert(!accepted(locationOffset: -1, accuracy: 51))
+    assert(!accepted(locationOffset: -9)) // don't associate an old phone location
+    assert(!accepted(locationOffset: 1, nowOffset: 1)) // phone moved AFTER final signal
+    assert(!accepted(locationOffset: 0, nowOffset: 9)) // delayed callbacks cannot revive a stale sighting
+    assert(!accepted(locationOffset: 0, accuracy: -1))
+    assert(!accepted(locationOffset: 0, accuracy: .infinity))
+    assert(!accepted(locationOffset: 0, accuracy: 10001))
+    assert(!accepted(locationOffset: 0, signalOffset: 1)) // no future sightings
+    let offsets = WatchRingPlan.delays
+    assert(offsets.count == 4 && offsets.first == 5 && offsets.last == 20)
+    assert(zip(offsets, offsets.dropFirst()).allSatisfy { $1 - $0 == 5 })
+    print("PASS: contemporaneous location, stale/after-signal rejection, strict accuracy, invalid fixes, four-ring timing contract")
+}
+checkLastPlaceAssociation()
+
+
+func checkAlignment() {
+    let t = Date(timeIntervalSince1970: 4000)
+    let a = LocalMapAlignment(latitude: 23.15, longitude: 113.35, mapLatitude: 23.152, mapLongitude: 113.354, time: t)
+    assert(a.applies(latitude: 23.151, longitude: 113.351, at: t.addingTimeInterval(10)))
+    assert(!a.applies(latitude: 24.15, longitude: 113.35, at: t))
+    assert(!a.applies(latitude: 23.15, longitude: 113.35, at: t.addingTimeInterval(86401)))
+    assert(!a.applies(latitude: 23.15, longitude: 113.35, at: t.addingTimeInterval(-1)))
+    print("PASS: local alignment region/expiry")
+}
+checkAlignment()
+
+func checkSignalGuidance() {
+    let t = Date(timeIntervalSince1970: 5000)
+    let controller = SignalGuideController()
+    controller.setDevice(UUID())
+    func window(_ rssi: Int, _ source: String, _ offset: Double) -> SignalWindow {
+        var signal = SignalWindow()
+        for i in 0...12 { _ = signal.add(rssi, source: source, at: t.addingTimeInterval(offset + Double(i))) }
+        return signal
+    }
+    let a = window(-50, "A", 0)
+    controller.update(a, at: t.addingTimeInterval(12), running: true)
+    assert(controller.headline == "信号较强")
+    assert(!controller.headline.contains("米"))
+    let veryStrong = window(-30, "A", 20)
+    controller.update(veryStrong, at: t.addingTimeInterval(32), running: true)
+    assert(controller.headline == "信号较强") // no fabricated 0.2m / 1m floor
+    let medium = window(-70, "A", 40)
+    controller.update(medium, at: t.addingTimeInterval(52), running: true)
+    assert(controller.headline == "信号适中")
+    let weak = window(-90, "A", 60)
+    controller.update(weak, at: t.addingTimeInterval(72), running: true)
+    assert(controller.headline == "信号较弱")
+    controller.recordRoute("起点", signal: weak, at: t.addingTimeInterval(72))
+    let left = window(-65, "A", 80)
+    controller.recordRoute("左侧", signal: left, at: t.addingTimeInterval(92))
+    assert(controller.routeAdvice.contains("左侧"))
+    controller.recordRoute("右侧", signal: left, at: t.addingTimeInterval(92))
+    assert(controller.routeReadings["右侧"] == nil)
+    controller.update(left, at: t.addingTimeInterval(100), running: true)
+    assert(controller.headline == "等待信号")
+    let changed = window(-60, "B", 110)
+    controller.update(changed, at: t.addingTimeInterval(122), running: true)
+    assert(controller.routeReadings.isEmpty)
+    controller.update(changed, at: t.addingTimeInterval(122), running: false)
+    assert(controller.headline == "等待信号")
+    print("PASS: signal-only labels, no meter output, route comparison, source isolation, stale/stopped display")
+}
+checkSignalGuidance()
+
+func checkDeviceLibrary() {
+    let suite = "FinderChecks.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let first = UUID(), second = UUID()
+    defaults.set(first.uuidString, forKey: "targetID")
+    defaults.set("Same Name", forKey: "targetName")
+    defaults.set(Date(timeIntervalSince1970: 1000), forKey: "lastSeen")
+    let library = DeviceLibrary(defaults: defaults)
+    assert(library.devices.count == 1)
+    assert(library.item(first)?.lastSeen != nil)
+    assert(library.item(first)?.notificationSupport == .untested)
+    library.save(SavedDevice(id: second, advertisedName: "Same Name", nickname: "Desk Headphones", kind: .headphones, storageNote: "Drawer"))
+    assert(library.devices.count == 2) // matching names must not merge identities
+    library.observe(id: second, name: "Changed BLE Name", services: ["180A"])
+    assert(library.item(second)?.displayName == "Desk Headphones")
+    assert(library.item(second)?.storageNote == "Drawer")
+    assert(library.item(second)?.notificationSupport == .untested)
+    library.recordSignal(id: second, source: "广播", at: Date(timeIntervalSince1970: 2000))
+    assert(library.item(first)?.lastSeen == Date(timeIntervalSince1970: 1000))
+    let restored = DeviceLibrary(defaults: defaults)
+    assert(restored.item(second)?.lastSeen == Date(timeIntervalSince1970: 2000))
+    restored.remove(second)
+    assert(restored.item(first) != nil && restored.item(second) == nil)
+    assert(!TargetMatchPolicy.matches(id: second, selected: nil, name: "Anything", hint: ""))
+    assert(!TargetMatchPolicy.matches(id: second, selected: first, name: "My serial 123", hint: "123"))
+    assert(TargetMatchPolicy.matches(id: first, selected: first, name: "New Name", hint: ""))
+    assert(TargetMatchPolicy.matches(id: first, selected: nil, name: "Suunto 123", hint: " 123 "))
+    print("PASS: legacy migration, device identity, metadata preservation, per-device last seen, persistence/removal, no empty-hint capture")
+}
+checkDeviceLibrary()
