@@ -36,7 +36,9 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
     private var seeking = false
     private var trackingStarted: Date?
     private var window = PhoneLocationWindow()
-    private var signal: (time: Date, rssi: Int, source: String)?
+    private var signalHistory = PlaceSignalHistory()
+    private var signal: PlaceSignalEvidence? { signalHistory.live }
+    private var signalPersistedAt: Date?
     private var key: String { "lastPlace.record.\(deviceID)" }
 
     override init() {
@@ -49,8 +51,14 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
     func setDevice(_ id: UUID?) {
         let value = id?.uuidString ?? ""
         guard deviceID != value else { return }
+        persistSignal()
         stopTracking()
-        deviceID = value; signal = nil; lastPlace = nil; manualReference = nil
+        deviceID = value; signalHistory = PlaceSignalHistory(); signalPersistedAt = nil
+        lastPlace = nil; manualReference = nil
+        if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key + ".signal"),
+           let saved = try? JSONDecoder().decode(PlaceSignalEvidence.self, from: data), saved.time <= Date() {
+            signalHistory = PlaceSignalHistory(restored: saved, deviceID: value)
+        }
         automaticPaused = UserDefaults.standard.bool(forKey: key + ".paused")
         if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key),
            let saved = try? JSONDecoder().decode(LastPlaceRecord.self, from: data),
@@ -78,7 +86,7 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
     }
     func setSeeking(_ active: Bool) {
         seeking = active
-        if !active { signal = nil; stopTracking() }
+        if !active { signalHistory.stopLive(); persistSignal(); stopTracking() }
         updateTracking()
     }
     func enable() {
@@ -93,10 +101,10 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         stopTracking(); updateTracking()
     }
     func clear() {
-        lastPlace = nil; manualReference = nil; signal = nil; automaticPaused = false
+        lastPlace = nil; manualReference = nil; signalHistory = PlaceSignalHistory(); signalPersistedAt = nil; automaticPaused = false
         stopTracking()
         if !deviceID.isEmpty {
-            for suffix in ["", ".manual", ".alignment", ".paused"] { UserDefaults.standard.removeObject(forKey: key + suffix) }
+            for suffix in ["", ".manual", ".alignment", ".paused", ".signal"] { UserDefaults.standard.removeObject(forKey: key + suffix) }
         }
         status = "此物品的自动位置、手动参考与旧对齐已删除"
         updateTracking()
@@ -126,7 +134,9 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) { updateTracking() }
     func observeSignal(rssi: Int, source: String, at time: Date) {
         guard seeking, !deviceID.isEmpty, (-126 ... -1).contains(rssi) else { return }
-        signal = (time, rssi, source)
+        let evidence = PlaceSignalEvidence(deviceID: deviceID, time: time, rssi: rssi, source: source)
+        guard signalHistory.observe(evidence, deviceID: deviceID) else { return }
+        if signalPersistedAt == nil || time.timeIntervalSince(signalPersistedAt!) >= 3 { persistSignal() }
         saveIfContemporaneous(at: time)
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -193,13 +203,26 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         UserDefaults.standard.set(true, forKey: key + ".paused")
         stopTracking(); status = "自动位置已标记为不可靠并暂停更新；请手动对齐或重新采集"
     }
+    private func persistSignal() {
+        guard let latest = signalHistory.latest, latest.deviceID == deviceID, !deviceID.isEmpty else { return }
+        if let data = try? JSONEncoder().encode(latest) {
+            UserDefaults.standard.set(data, forKey: key + ".signal"); signalPersistedAt = latest.time
+        }
+    }
     var calibrationReference: LastPlaceRecord? {
-        if let signal, (0...8).contains(Date().timeIntervalSince(signal.time)) {
-            let fix = window.stable(at: Date())
-            return LastPlaceRecord(deviceID: deviceID, latitude: fix?.latitude ?? lastPlace?.latitude ?? 0,
-                longitude: fix?.longitude ?? lastPlace?.longitude ?? 0, accuracy: fix?.accuracy ?? 10000,
-                locationTime: min(fix?.time ?? signal.time, signal.time), signalTime: signal.time,
-                rssi: signal.rssi, source: signal.source, qualityVersion: 3)
+        let manualTime = manualReference?.signalTime ?? .distantPast
+        let automaticTime = lastPlace?.signalTime ?? .distantPast
+        if let evidence = signalHistory.latest, evidence.time >= max(manualTime, automaticTime) {
+            let now = Date()
+            let fresh = window.stable(at: now)
+            let matchedFix = fresh.flatMap { (0...3).contains(evidence.time.timeIntervalSince($0.time)) ? $0 : nil }
+            let matchedRecord = lastPlace.flatMap { abs(evidence.time.timeIntervalSince($0.signalTime)) <= 3 ? $0 : nil }
+            return LastPlaceRecord(deviceID: deviceID,
+                latitude: matchedFix?.latitude ?? matchedRecord?.latitude ?? manualReference?.latitude ?? 0,
+                longitude: matchedFix?.longitude ?? matchedRecord?.longitude ?? manualReference?.longitude ?? 0,
+                accuracy: matchedFix?.accuracy ?? matchedRecord?.accuracy ?? 10000,
+                locationTime: min(matchedFix?.time ?? matchedRecord?.locationTime ?? evidence.time, evidence.time),
+                signalTime: evidence.time, rssi: evidence.rssi, source: evidence.source, qualityVersion: 3)
         }
         if let manualReference { return displayRecord(manualReference) }
         return lastPlace

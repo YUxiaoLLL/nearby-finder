@@ -212,6 +212,10 @@ private struct LastPlaceSection: View {
                     Text("你已标记此自动位置不可靠，自动更新已暂停。")
                         .font(.caption).foregroundStyle(.orange)
                 }
+                if controller.manualReference == nil && place.qualityVersion == 3 && place.userRejected != true {
+                    LastPlaceMap(place: place).frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 12))
+                    Button("在地图中查看自动位置") { controller.openMap() }
+                }
                 DisclosureGroup("查看自动定位原始参考") {
                     LastPlaceMap(place: place).frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 12))
                     Text("圆圈是系统报告的手机定位不确定范围，不是物品所在范围；室内通常不能判断房间、楼层或无声物品的具体位置。")

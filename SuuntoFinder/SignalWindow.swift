@@ -161,3 +161,27 @@ struct ManualPlaceReference: Codable {
     }
     func belongs(to id: String) -> Bool { isValid && deviceID == id }
 }
+
+struct PlaceSignalEvidence: Codable {
+    let deviceID: String
+    let time: Date
+    let rssi: Int
+    let source: String
+    var isValid: Bool {
+        !deviceID.isEmpty && time.timeIntervalSinceReferenceDate.isFinite && (-126 ... -1).contains(rssi)
+    }
+}
+/// Stopping live measurement must not erase the historical context for manual confirmation.
+struct PlaceSignalHistory {
+    private(set) var live: PlaceSignalEvidence?
+    private(set) var latest: PlaceSignalEvidence?
+    init(restored: PlaceSignalEvidence? = nil, deviceID: String = "") {
+        if let restored, restored.isValid, restored.deviceID == deviceID { latest = restored }
+    }
+    @discardableResult mutating func observe(_ evidence: PlaceSignalEvidence, deviceID: String) -> Bool {
+        guard evidence.isValid, evidence.deviceID == deviceID,
+              latest == nil || evidence.time >= latest!.time else { return false }
+        live = evidence; latest = evidence; return true
+    }
+    mutating func stopLive() { live = nil }
+}
