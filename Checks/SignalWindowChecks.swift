@@ -72,14 +72,14 @@ checkCloseRangeGate()
 
 func checkLastPlaceAssociation() {
     let t = Date(timeIntervalSince1970: 3000)
-    func accepted(locationOffset: Double, signalOffset: Double = 0, nowOffset: Double = 0, accuracy: Double = 30) -> Bool {
+    func accepted(locationOffset: Double, signalOffset: Double = 0, nowOffset: Double = 0, accuracy: Double = 12) -> Bool {
         LastPlacePolicy.canAssociate(locationTime: t.addingTimeInterval(locationOffset), accuracy: accuracy,
             signalTime: t.addingTimeInterval(signalOffset), at: t.addingTimeInterval(nowOffset))
     }
     assert(accepted(locationOffset: -2))
     assert(!accepted(locationOffset: -5, accuracy: 5000)) // coarse fixes no longer become precise-looking pins
-    assert(accepted(locationOffset: -1, accuracy: 50))
-    assert(!accepted(locationOffset: -1, accuracy: 51))
+    assert(accepted(locationOffset: -1, accuracy: 20))
+    assert(!accepted(locationOffset: -1, accuracy: 21))
     assert(!accepted(locationOffset: -9)) // don't associate an old phone location
     assert(!accepted(locationOffset: 1, nowOffset: 1)) // phone moved AFTER final signal
     assert(!accepted(locationOffset: 0, nowOffset: 9)) // delayed callbacks cannot revive a stale sighting
@@ -176,3 +176,63 @@ func checkDeviceLibrary() {
     print("PASS: legacy migration, device identity, metadata preservation, per-device last seen, persistence/removal, no empty-hint capture")
 }
 checkDeviceLibrary()
+
+func checkLocationEvidence() {
+    let t = Date(timeIntervalSince1970: 9000)
+    var window = PhoneLocationWindow()
+    func fix(_ offset: Double, lat: Double = 40, lon: Double = -75, accuracy: Double = 12) -> PhoneLocationFix {
+        PhoneLocationFix(latitude: lat, longitude: lon, accuracy: accuracy, time: t.addingTimeInterval(offset))
+    }
+    for i in 0...6 {
+        let now = t.addingTimeInterval(Double(i))
+        assert(window.add(fix(Double(i)), sessionStarted: t, at: now))
+        if i < 6 { assert(window.stable(at: now) == nil) }
+    }
+    assert(window.stable(at: t.addingTimeInterval(6))?.accuracy == 12)
+    assert(window.stable(at: t.addingTimeInterval(10)) == nil)
+    assert(!window.add(fix(6), sessionStarted: t, at: t.addingTimeInterval(6)))
+    assert(window.add(fix(7, lat: 40.01), sessionStarted: t, at: t.addingTimeInterval(7)))
+    assert(window.rejectedJump && window.samples.count == 1)
+    assert(window.stable(at: t.addingTimeInterval(7)) == nil)
+    assert(!window.add(fix(8, accuracy: 21), sessionStarted: t, at: t.addingTimeInterval(8)))
+    assert(window.samples.isEmpty)
+    assert(!window.add(fix(-1), sessionStarted: t, at: t))
+    assert(!window.add(fix(1), sessionStarted: t, at: t))
+    assert(!window.add(fix(0), sessionStarted: t, at: t.addingTimeInterval(4)))
+    assert(!window.add(fix(0, lat: .nan), sessionStarted: t, at: t))
+    assert(!window.add(fix(0, lon: 181), sessionStarted: t, at: t))
+    assert(!window.add(fix(0, accuracy: 0), sessionStarted: t, at: t))
+    window.reset()
+    for i in 0...4 { _ = window.add(fix(Double(i)), sessionStarted: t, at: t.addingTimeInterval(Double(i))) }
+    _ = window.add(fix(10), sessionStarted: t, at: t.addingTimeInterval(10))
+    assert(window.samples.count == 1) // a sampling interruption restarts the dwell
+    window.reset()
+    for i in 0...20 { _ = window.add(fix(Double(i)), sessionStarted: t, at: t.addingTimeInterval(Double(i))) }
+    assert(window.stable(at: t.addingTimeInterval(20), minimumDuration: 20) != nil)
+
+    let manual = ManualPlaceReference(deviceID: "one", latitude: 40, longitude: -75,
+        signalTime: t, rssi: -60, source: "test", confirmedAt: t.addingTimeInterval(600), note: "Office, third floor")
+    let restored = try! JSONDecoder().decode(ManualPlaceReference.self, from: JSONEncoder().encode(manual))
+    assert(restored.belongs(to: "one") && !restored.belongs(to: "two"))
+    assert(restored.note == manual.note && restored.signalTime == t)
+    // Confirmation has no automatic expiration and cannot overwrite automatic GPS storage.
+    assert(restored.confirmedAt == t.addingTimeInterval(600))
+    let invalid = ManualPlaceReference(deviceID: "one", latitude: 91, longitude: -75,
+        signalTime: t, rssi: -60, source: "test", confirmedAt: t, note: "")
+    assert(!invalid.isValid)
+    let futureSignal = ManualPlaceReference(deviceID: "one", latitude: 40, longitude: -75,
+        signalTime: t.addingTimeInterval(1), rssi: -60, source: "test", confirmedAt: t, note: "")
+    assert(!futureSignal.isValid)
+
+    let legacy = "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"advertisedName\":\"Old\",\"nickname\":\"Old\",\"kind\":\"耳机\",\"storageNote\":\"\",\"notificationSupport\":\"未验证\",\"services\":[],\"lastSource\":\"未知\"}"
+    assert((try! JSONDecoder().decode(SavedDevice.self, from: Data(legacy.utf8))).kind == .headphones)
+    for kind in [DeviceKind.stylus, .mouse, .keyboard] {
+        let device = SavedDevice(id: UUID(), advertisedName: "Test", nickname: "Test", kind: kind)
+        assert((try! JSONDecoder().decode(SavedDevice.self, from: JSONEncoder().encode(device))).kind == kind)
+    }
+    assert(DeviceKind.suggested(for: "Apple Pencil") == .stylus)
+    assert(DeviceKind.suggested(for: "Bluetooth Keyboard") == .keyboard)
+    assert(DeviceKind.suggested(for: "Mouse") == .mouse)
+    print("PASS: fresh session fixes, stable location dwell, jumps/gaps/stale/future/invalid rejection, persistent manual reference identity and categories migration")
+}
+checkLocationEvidence()
