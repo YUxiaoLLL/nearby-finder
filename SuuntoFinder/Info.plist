@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+<key>CFBundleDisplayName</key><string>随手寻</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.9.0</string>
+<key>CFBundleVersion</key><string>7</string>
+<key>LSRequiresIPhoneOS</key><true/>
+<key>NSBluetoothAlwaysUsageDescription</key><string>扫描并尝试连接你确认拥有的蓝牙设备，通过信号强弱辅助寻找；不同设备支持能力有所不同。</string>
+<key>NSLocationWhenInUseUsageDescription</key><string>在前台寻找手表时，保存收到手表信号时手机的大概位置，作为下次寻找的起点。位置仅保存在本机。</string>
+<key>NSLocationTemporaryUsageDescriptionDictionary</key><dict><key>FindWatchLocation</key><string>需要更精确的手机位置，避免把误差较大的区域保存为最后发现地点。</string></dict>
+<key>UIRequiresFullScreen</key><true/>
+<key>UILaunchScreen</key><dict/>
+<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+</dict></plist>
