@@ -10,3 +10,5 @@ Current source preview / 当前源码预览，2026-10-21。This describes the cu
 - Removing the app clears its local app data; manage backups separately in iOS. / 删除 App 清除本机 App 数据，备份另行管理。
 
 Please do not put private diagnostics in public GitHub Issues. / 请勿在公开 Issue 发布私人诊断数据。
+
+V0.10: Manual reference coordinates, corresponding signal timestamps and room/floor notes are stored separately on the device. A manual map/address search sends the entered query to Apple Maps; this app does not send it to an app-operated server. Removing a device clears automatic, manual, legacy alignment and paused-recording preferences. / 手动参考独立本机保存；地图搜索将输入内容发送给 Apple 地图；移出收藏删除该件物品的全部位置参考与设置。

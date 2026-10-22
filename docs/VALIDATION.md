@@ -1,11 +1,17 @@
 # Validation / 验证范围
 
-V0.9 source preview, 2026-10-21.
+V0.10 source preview, 2026-10-22.
 
-Logic checks cover invalid RSSI, filtering and trends, stale signal, source isolation, threshold dwell/hysteresis, four-notification timing contract, location quality/time association, local map alignment limits, route sampling, library migration/persistence/removal and UUID matching.
+Logic checks cover signal filtering, stale signal, source isolation, trigger dwell, four-notification timing, route comparison, collection migration and UUID isolation, plus:
 
-逻辑检查不能证明通知真的送达或响铃，也不能证明地图位置准确。Tests do not prove notification delivery, audible sound or location accuracy.
+- Location fixes must be from the current sampling session, no more than three seconds old, finite and within the strict reported uncertainty limit.
+- At least five samples over six seconds; bursts, gaps and coordinate jumps restart or reject the location window. A longer stable window is available for rapid large changes.
+- No system-uncertainty improvement is claimed through smoothing.
+- Manual references encode/decode with the original signal time, confirmation time and notes; identity is checked against the selected device. They have no expiration rule.
+- Existing categories still decode; new stylus/mouse/keyboard categories round-trip correctly.
 
-The original development build passed unsigned generic iOS compilation. The sanitized public source copy also passed all logic checks and an unsigned generic iOS build. / 已脱敏的公开源码副本也已独立通过全部逻辑检查与未签名 iOS 构建。
+Public source copy: run `bash Check.command` for logic checks and an unsigned generic iOS build. Prior hardware results apply only to the author's Suunto 9 Peak Pro setup. Tests cannot prove real-world location accuracy, notification delivery or audibility.
 
-Hardware regression pending for V0.9 UI centering, multi-device switching, iPad layout, Bluetooth restoration and lock-screen notification behavior. Simulator services were unavailable in the preparation environment; no simulator screenshot or hardware success is claimed. / V0.9 界面与蓝牙真机回归待完成。
+V0.10 hardware regression remains pending: category layout, manual map searching/panning, persistence after restarting and waiting a day, GPS drift indoors, per-device isolation, blocked permissions and notification regression. No signed installation or firmware changes are claimed.
+
+本版必须真机核对：自动记录的历史时间、手动对齐保存与重启保留、独立设备隔离和实际地点。不能把系统报告的不确定范围当作真实误差保证。

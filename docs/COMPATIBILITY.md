@@ -1,16 +1,20 @@
 # 兼容性 / Compatibility
 
-Updated / 更新：2026-10-21。This is an evidence log, not a universal support list. / 此表记录证据，不承诺全品牌兼容。
+Updated / 更新：2026-10-22。This is an evidence log, not a universal support list. / 此表记录证据，不承诺全品牌兼容。
 
 **作者已有真机结果 ≠ 多人认证；文档候选 ≠ 已支持。Prior author testing is not broad certification; a research candidate is not supported hardware.**
 
 | Device / 型号 | Signal / 信号 | Alerts / 提醒 | Evidence & status / 证据与状态 |
 |---|---|---|---|
-| Suunto 9 Peak Pro | 作者已测试 / Author tested | 前台和锁屏下通知转发曾发声 / Forwarded notifications sounded in foreground and locked-phone tests | 唯一已有实际结果的型号；V0.9 仍需回归 / Only model with prior hardware results; V0.9 regression pending |
+| Suunto 9 Peak Pro | 作者已测试 / Author tested | 前台和锁屏下通知转发曾发声 / Forwarded notifications sounded in foreground and locked-phone tests | 唯一已有实际结果的型号；V0.9 仍需回归 / Only model with prior hardware results; V0.10 regression pending |
 | Fitbit Inspire 3, Charge 5 / 6 | 未测试 / Untested | 未测试 / Untested | 官方失物帮助推荐蓝牙定位工具；具体型号能力待核实 / Official lost-device guidance suggests Bluetooth locators; model-specific behavior unverified |
 | Polar Pacer / Pacer Pro, Vantage M2 | 未测试 / Untested | 不承诺声音；文档描述通知振动 / No sound claim; documented notification vibration | 文档候选 / Research candidates |
 | Casio G-SHOCK GBD-200 | 未测试 / Untested | 不承诺声音；文档有通知振动 / No sound claim; notification vibration documented | 广播与连接条件待测试 / Advertising and connection conditions untested |
-| Headphones / other BLE devices · 耳机及其他物品 | 未测试，可能无法扫描 / Untested; discovery may fail | 无通用响铃支持 / No universal ringing support | 仅提供实验性信号流程 / Experimental signal workflow only |
+| Apple Pencil / styluses · 触控笔 | Untested; generation, host and sleep state matter / 未验证，受代际、主机与休眠影响 | No ringing support / 无发声控制 | Pencil Pro: use Apple Find My first / Pro 优先官方查找 |
+| Headphones · 耳机 | Untested; case and sleep may hide the signal / 未验证，盒内可能不可见 | No universal ring command / 无通用响铃 | Supported AirPods: use Find My first / 支持的 AirPods 优先查找 |
+| Bluetooth mice · 蓝牙鼠标 | Untested; BLE visibility required / 未验证，需 BLE 可见 | None / 无 | Sleeping / host-connected / proprietary receiver may be invisible / 休眠、连接主机、专用接收器可能不可见 |
+| Bluetooth keyboards · 蓝牙键盘 | Untested; BLE visibility required / 未验证，需 BLE 可见 | None / 无 | Category support is organizational, not hardware certification / 类别仅为分类管理 |
+| Other BLE devices · 其他物品 | Untested / 未验证 | No universal ringing / 无通用响铃 | Experimental only / 实验性流程 |
 
 ## 官方资料 / Official sources
 
