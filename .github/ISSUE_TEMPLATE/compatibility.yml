@@ -1,0 +1,39 @@
+name: Compatibility report / 兼容实测
+description: Report actual tests on a device you own / 提交自有设备实测
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include serials, UUIDs, coordinates or private logs. 请勿填写序列号、蓝牙标识、坐标或私人日志。"
+  - type: input
+    id: model
+    attributes:
+      label: Device model / 设备型号
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions / 版本
+      description: Firmware, iPhone model, iOS and app version / 固件、手机型号、iOS、App 版本
+    validations:
+      required: true
+  - type: dropdown
+    id: scenario
+    attributes:
+      label: Scenario / 场景
+      options:
+        - Controlled test / 受控藏放
+        - Actual recovery attempt / 实际遗失寻找
+  - type: textarea
+    id: results
+    attributes:
+      label: Results / 结果
+      description: Discovery, continuous RSSI, connection restore, foreground and locked alerts; sound vs vibration; other accessories alerted? / 发现、连续信号、重连、前台锁屏提醒、声音或振动、是否提醒其他配件
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Setup and limitations / 设置与问题
+      description: Official app state, notification settings, failures, approximate search duration / 官方App状态、通知设置、失败情况、寻找耗时

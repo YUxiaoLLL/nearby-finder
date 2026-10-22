@@ -1,0 +1,24 @@
+name: Bug report / 问题反馈
+description: Report unexpected app behavior / 反馈异常行为
+body:
+  - type: markdown
+    attributes:
+      value: "Remove private device identifiers, coordinates and notification contents. 请先脱敏，不上传完整私人日志。"
+  - type: input
+    id: environment
+    attributes:
+      label: App, iOS and watch versions / App、iOS、手表版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior / 预期与实际结果
+    validations:
+      required: true
