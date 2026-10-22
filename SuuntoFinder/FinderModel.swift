@@ -97,7 +97,7 @@ final class FinderModel: NSObject, ObservableObject, CBCentralManagerDelegate, C
         // All model mutations and delegate callbacks use the main queue.
         central = CBCentralManager(delegate: self, queue: .main)
         clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        record("launch", ["version":"0.10-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
+        record("launch", ["version":"0.11-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
     }
 
     func record(_ event: String, _ data: [String: Any] = [:]) {

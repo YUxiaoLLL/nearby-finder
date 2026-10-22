@@ -33,7 +33,7 @@ struct ContentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Button(model.running ? "暂停信号寻找" : "开始寻找") { model.running ? model.stop() : model.start() }
                     if !model.rssiError.isEmpty { Text(model.rssiError).font(.caption).foregroundStyle(.orange) }
-                } header: { Text("随手寻 · V0.10（开发版）") }
+                } header: { Text("随手寻 · V0.11（开发版）") }
                 Section {
                     Button { showLibrary = true } label: { Label("我的设备", systemImage: "square.grid.2x2") }
                     Button {
@@ -174,60 +174,22 @@ private struct LastPlaceSection: View {
                 LabeledContent("最后有效信号") { Text(date, format: .dateTime.month().day().hour().minute().second()) }.font(.subheadline)
             } else { Text("尚未收到有效信号").foregroundStyle(.secondary) }
 
-            Button {
-                mapToCalibrate = controller.calibrationReference
-            } label: { Label("手动对齐／确认位置", systemImage: "mappin.and.ellipse") }
-                .disabled(controller.calibrationReference == nil)
-            Text(controller.calibrationReference == nil
-                 ? "先收到一次此物品的有效信号。已有历史记录时，暂停寻找或 GPS 不准也能手动对齐。"
-                 : "对齐的是这次信号对应的手机位置参考。暂停寻找或 GPS 不准也可操作，请核对信号时间。")
-                .font(.caption).foregroundStyle(.secondary)
-
-            if let reference = controller.manualReference {
-                LastPlaceMap(place: controller.displayRecord(reference), manual: true)
-                    .frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 12))
-                Text("你确认的参考位置").font(.headline)
-                if !reference.note.isEmpty { Text(reference.note).font(.subheadline) }
-                Text("对应信号：\(reference.signalTime.formatted(date: .abbreviated, time: .standard))")
+            if let place = controller.displayedPlace {
+                LastPlaceMap(place: place, manual: place.accuracy == 0)
+                    .frame(height: 190).clipShape(RoundedRectangle(cornerRadius: 12))
+                Text(controller.displayLabel).font(.subheadline)
+                Text(place.signalTime, format: .dateTime.month().day().hour().minute())
                     .font(.caption).foregroundStyle(.secondary)
-                Text("手动确认：\(reference.confirmedAt.formatted(date: .abbreviated, time: .standard))")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("此参考点不会过期或被自动采样覆盖；它是你的历史确认，不代表物品现在仍在这里，也没有 GPS 精度保证。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("修改此历史参考") { mapToCalibrate = controller.displayRecord(reference) }
-                Button("在地图中查看手动参考") { controller.openMap(manual: true) }
-                Button("撤销手动参考") { controller.resetMapCalibration() }
-            }
-            if let place = controller.lastPlace {
-                Text("自动记录：收到信号时手机的位置").font(.headline)
-                Text("对应信号：\(place.signalTime.formatted(date: .abbreviated, time: .standard))")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("系统报告不确定范围约 \(Int(ceil(place.accuracy))) 米，不是实际误差保证")
-                    .font(.caption).foregroundStyle(.secondary)
-                if place.qualityVersion != 3 {
-                    Text("旧版记录未通过本版稳定性检查，请核对后手动确认或重新采集。")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-                if place.userRejected == true {
-                    Text("你已标记此自动位置不可靠，自动更新已暂停。")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-                if controller.manualReference == nil && place.qualityVersion == 3 && place.userRejected != true {
-                    LastPlaceMap(place: place).frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 12))
-                    Button("在地图中查看自动位置") { controller.openMap() }
-                }
-                DisclosureGroup("查看自动定位原始参考") {
-                    LastPlaceMap(place: place).frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 12))
-                    Text("圆圈是系统报告的手机定位不确定范围，不是物品所在范围；室内通常不能判断房间、楼层或无声物品的具体位置。")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("在地图中查看自动位置") { controller.openMap() }
-                }
-                Button("这个自动位置不对") { controller.rejectAutomaticLocation() }
+                Button("在地图中查看") { controller.openMap() }
             } else {
-                Text("尚无符合条件的自动位置").foregroundStyle(.secondary)
-                Text("只接受本次采样开始后的新定位：系统报告范围 ≤20 米、至少 5 个样本、连续稳定 6 秒，并与有效信号相隔不超过 3 秒。无合格定位就不新增标记；以前的信号不能补回位置。")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("正在等待手机定位，收到设备信号后自动记录。")
+                    .font(.subheadline).foregroundStyle(.secondary)
             }
+            Button { mapToCalibrate = controller.calibrationReference } label: {
+                Label("位置不准？手动对齐", systemImage: "mappin.and.ellipse")
+            }.disabled(controller.calibrationReference == nil)
+            Text("记录的是收到信号时的手机位置，供寻找物品时参考。")
+                .font(.caption).foregroundStyle(.secondary)
             Button("重新采集手机位置") {
                 if !model.running { model.start() }
                 controller.improveLocation()
@@ -235,7 +197,16 @@ private struct LastPlaceSection: View {
             if !controller.enabled { Button("开启自动最后位置记录") { controller.enable() } }
             if controller.enabled && controller.reducedAccuracy { Button("请求精确位置") { controller.improveLocation() } }
             Text(controller.status).font(.caption).foregroundStyle(.secondary)
-            DisclosureGroup("位置记录设置") {
+            DisclosureGroup("位置详情与设置") {
+                if let raw = controller.lastPlace {
+                    Text("系统报告范围约 \(Int(ceil(raw.accuracy))) 米，不是实际误差保证。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    LastPlaceMap(place: raw).frame(height: 170)
+                    Text("上图为未校正的系统原始位置").font(.caption)
+                }
+                if controller.manualReference != nil {
+                    Button("撤销手动对齐") { controller.resetMapCalibration() }
+                }
                 if controller.enabled { Button("关闭自动位置记录") { controller.disable() } }
                 if controller.authorizationDenied {
                     Button("打开 App 设置") {
@@ -245,7 +216,7 @@ private struct LastPlaceSection: View {
                 if controller.lastPlace != nil || controller.manualReference != nil {
                     Button("删除此物品的全部位置参考", role: .destructive) { confirmClear = true }
                 }
-                Text("自动定位只在前台寻找时采样。自动位置、手动确认与常放位置备注分别保存；手动确认不修改 GPS 原始记录。")
+                Text("自动定位只在前台寻找时采样。原始位置和手动对齐分别保存。对齐仅影响原点附近 500 米内的地图显示，不提升 GPS 测量精度；离开后使用系统位置。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         } header: { Text("最后信号与位置参考") }
@@ -345,7 +316,7 @@ private struct FinderGuideView: View {
                 Section("信号、路线与地图") {
                     Text("页面显示信号较强／适中／较弱和变化趋势，不换算米数。20 厘米、一米或隔着抽屉都可能出现相似读数，因此不能把信号等级当成实际距离。")
                     Text("前后左右只能通过你实际移动、记录不同路线的信号进行比较；单个 RSSI 没有入射角。路线结果表示哪个采样点信号更强，不是测得的设备方向。")
-                    Text("最后位置是信号发生时的手机位置参考。自动记录需新定位、系统不确定范围不超过 20 米并稳定至少六秒；此范围不是准确性保证。地图偏移时可直接打开手动对齐，确认地点和时间，独立保存的参考不会过期或被自动覆盖。")
+                    Text("最后位置是信号发生时的手机位置参考。自动记录使用收到信号时的新手机定位；明显跳点需等待稳定确认。地图偏移时点手动对齐：有效原始定位附近 500 米内的后续记录会同步校正显示，此校正不提升 GPS 实际精度。")
                 }
                 Section("为什么不能直接调大手表音量？") {
                     Text("目前可用通知链路没有手表音量控制接口。请在手表 General → Tones 中开启提示音，并打开振动、关闭勿扰。手机音量并不等于手表音量。改变提醒次数不能提高单次声压。")
@@ -416,7 +387,7 @@ private struct MapCalibrationView: View {
                     .onChange(of: region.center.longitude) { _ in confirmed = false }
                 TextField("位置备注，例如公司三楼会议室", text: $note).textFieldStyle(.roundedBorder).padding(.horizontal)
                 Toggle("我确认此处对应上述信号发生时的手机位置", isOn: $confirmed).font(.caption).padding(.horizontal)
-                Text("独立保存为手动参考，不修改原始定位、不自动过期，也不代表物品目前的位置。")
+                Text("保留原始定位；有对应手机定位时，同时校正附近后续自动记录的地图显示。仅有历史手动点时需重新取得定位再对齐。")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
                 Text(controller.status).font(.caption).padding(.horizontal)
             }.navigationTitle("手动对齐／确认位置").navigationBarTitleDisplayMode(.inline)

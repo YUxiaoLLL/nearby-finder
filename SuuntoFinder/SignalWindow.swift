@@ -125,7 +125,6 @@ struct PhoneLocationWindow {
               (0...3).contains(now.timeIntervalSince(fix.time)) else {
             reset(); return false
         }
-        rejectedJump = false
         if let last = samples.last, fix.time.timeIntervalSince(last.time) > 3 { samples = [] }
         samples = samples.filter { (0...30).contains(now.timeIntervalSince($0.time)) }
         // One outlier invalidates the cluster; several precise-looking samples are not enough.
@@ -134,6 +133,12 @@ struct PhoneLocationWindow {
         }
         samples.append(fix); samples = Array(samples.suffix(40))
         return true
+    }
+    func candidate(at now: Date, minimumDuration: TimeInterval = 6) -> PhoneLocationFix? {
+        if let stable = stable(at: now, minimumDuration: minimumDuration) { return stable }
+        guard minimumDuration == 6, !rejectedJump, let last = samples.last,
+              (0...3).contains(now.timeIntervalSince(last.time)) else { return nil }
+        return last
     }
     func stable(at now: Date, minimumDuration: TimeInterval = 6) -> PhoneLocationFix? {
         guard samples.count >= 5, let first = samples.first, let last = samples.last,
@@ -184,4 +189,22 @@ struct PlaceSignalHistory {
         live = evidence; latest = evidence; return true
     }
     mutating func stopLive() { live = nil }
+}
+
+/// Device-local display correction. Raw Core Location coordinates remain unchanged.
+struct PlaceDisplayAlignment: Codable {
+    let deviceID: String
+    let latitude: Double
+    let longitude: Double
+    let targetLatitude: Double
+    let targetLongitude: Double
+    func corrected(deviceID id: String, latitude lat: Double, longitude lon: Double) -> (Double, Double)? {
+        guard id == deviceID, !id.isEmpty,
+              PlaceGeometry.valid(latitude, longitude), PlaceGeometry.valid(targetLatitude, targetLongitude),
+              PlaceGeometry.valid(lat, lon),
+              PlaceGeometry.distance(latitude, longitude, targetLatitude, targetLongitude) <= 2000,
+              PlaceGeometry.distance(latitude, longitude, lat, lon) <= 500 else { return nil }
+        let result = (lat + targetLatitude - latitude, lon + targetLongitude - longitude)
+        return PlaceGeometry.valid(result.0, result.1) ? result : nil
+    }
 }
