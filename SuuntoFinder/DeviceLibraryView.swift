@@ -12,20 +12,25 @@ struct DeviceLibraryView: View {
                 if library.devices.isEmpty {
                     Text("先从附近设备中确认自己的物品，再加入收藏。以后可以直接点名字寻找。")
                 }
-                ForEach(library.devices) { device in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(device.displayName, systemImage: device.kind.icon).font(.headline)
-                        Text(device.kind.rawValue).font(.caption).foregroundStyle(.secondary)
-                        if !device.storageNote.isEmpty { Text("常放：\(device.storageNote)").font(.subheadline) }
-                        if let date = device.lastSeen { Text("最后信号：\(date.formatted(date: .abbreviated, time: .shortened))").font(.caption) }
-                        if device.kind == .watch { Text("通知提醒：\(device.notificationSupport.rawValue)").font(.caption).foregroundStyle(.secondary) }
-                        HStack {
-                            Button("寻找这件物品") { model.selectSaved(device); dismiss() }
-                            Spacer()
-                            Button("编辑") { editing = device }
-                            Button("移出收藏", role: .destructive) { pendingRemoval = device }
-                        }.buttonStyle(.borderless)
-                    }.padding(.vertical, 4)
+                ForEach(DeviceKind.allCases) { kind in
+                    if library.devices.contains(where: { $0.kind == kind }) {
+                        Section(kind.rawValue) {
+                            ForEach(library.devices.filter { $0.kind == kind }) { device in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label(device.displayName, systemImage: device.kind.icon).font(.headline)
+                                    if !device.storageNote.isEmpty { Text("常放：\(device.storageNote)").font(.subheadline) }
+                                    if let date = device.lastSeen { Text("最后信号：\(date.formatted(date: .abbreviated, time: .shortened))").font(.caption) }
+                                    if device.kind == .watch { Text("通知提醒：\(device.notificationSupport.rawValue)").font(.caption).foregroundStyle(.secondary) }
+                                    HStack {
+                                        Button("寻找这件物品") { model.selectSaved(device); dismiss() }
+                                        Spacer()
+                                        Button("编辑") { editing = device }
+                                        Button("移出收藏", role: .destructive) { pendingRemoval = device }
+                                    }.buttonStyle(.borderless)
+                                }.padding(.vertical, 4)
+                            }
+                        }
+                    }
                 }
                 Section {
                     Text("同名设备可能不是同一件物品；UUID 变化后需要重新确认。耳机、手环及其他设备是否持续广播、允许连接或响应通知，必须分别测试。")
@@ -51,6 +56,7 @@ struct DeviceEditorView: View {
             Form {
                 TextField("昵称", text: $device.nickname)
                 Picker("类别", selection: $device.kind) { ForEach(DeviceKind.allCases) { Text($0.rawValue).tag($0) } }
+                DeviceCapabilityNote(kind: device.kind)
                 TextField("常放位置，例如玄关抽屉", text: $device.storageNote)
                 Text("常放位置由你填写，与手机定位记录不同。").font(.caption).foregroundStyle(.secondary)
                 if device.kind == .watch {
@@ -85,6 +91,7 @@ struct AddDeviceView: View {
                 Text(row.id.uuidString).font(.caption2).textSelection(.enabled)
                 TextField("给自己的物品起个名字", text: $nickname)
                 Picker("类别", selection: $kind) { ForEach(DeviceKind.allCases) { Text($0.rawValue).tag($0) } }
+                DeviceCapabilityNote(kind: kind)
                 TextField("常放位置（选填）", text: $note)
                 Text("请先在设备已找到时确认身份。名称相同或信号很强，都不能证明这是你的设备。加入收藏不等于保证能连接或响铃。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -92,7 +99,7 @@ struct AddDeviceView: View {
             }.navigationTitle("确认并收藏")
                 .onAppear {
                     nickname = row.name
-                    if row.name.localizedCaseInsensitiveContains("Suunto") { kind = .watch }
+                    kind = DeviceKind.suggested(for: row.name)
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
@@ -138,6 +145,33 @@ struct NearbyDevicesView: View {
             }.navigationTitle("附近设备")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .sheet(item: $pending) { AddDeviceView(model: model, row: $0) }
+        }
+    }
+}
+
+struct DeviceCapabilityNote: View {
+    let kind: DeviceKind
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(kind.guidance).font(.caption).foregroundStyle(.secondary)
+            if let guide = kind.officialGuide { Link("查看 Apple 官方查找指南", destination: guide).font(.caption) }
+        }
+    }
+}
+
+struct DeviceCategorySection: View {
+    var body: some View {
+        Section {
+            DisclosureGroup("物品类别与寻找方式") {
+                ForEach(DeviceKind.allCases) { kind in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label(kind.rawValue, systemImage: kind.icon).font(.subheadline.bold())
+                        DeviceCapabilityNote(kind: kind)
+                    }.padding(.vertical, 4)
+                }
+                Text("增加类别是为了分类管理，不代表每个品牌都能被 iPhone 找到。无声设备可结合常放位置、信号趋势与手机最后位置参考；不能补回从未记录的位置。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

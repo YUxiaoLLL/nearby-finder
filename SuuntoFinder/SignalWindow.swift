@@ -75,10 +75,10 @@ enum WatchRingPlan {
 /// Pure policy shared by location recording and its tests.
 enum LastPlacePolicy {
     static func canAssociate(locationTime: Date, accuracy: Double, signalTime: Date, at now: Date) -> Bool {
-        accuracy.isFinite && accuracy >= 0 && accuracy <= 50
+        accuracy.isFinite && accuracy > 0 && accuracy <= 20
             && (0...8).contains(now.timeIntervalSince(signalTime))
-            && (0...8).contains(signalTime.timeIntervalSince(locationTime))
-            && (0...10).contains(now.timeIntervalSince(locationTime))
+            && (0...3).contains(signalTime.timeIntervalSince(locationTime))
+            && (0...3).contains(now.timeIntervalSince(locationTime))
     }
 }
 
@@ -94,4 +94,70 @@ struct LocalMapAlignment: Codable {
         let east = (lon - longitude) * 111_320 * cos(latitude * .pi / 180)
         return (0...86400).contains(now.timeIntervalSince(time)) && hypot(north, east) <= 1000
     }
+}
+
+/// Coordinate math for quality checks; never converts between map datums.
+enum PlaceGeometry {
+    static func valid(_ latitude: Double, _ longitude: Double) -> Bool {
+        latitude.isFinite && longitude.isFinite && (-90...90).contains(latitude) && (-180...180).contains(longitude)
+    }
+    static func distance(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
+        let a = lat1 * .pi / 180, b = lat2 * .pi / 180
+        let dLat = b - a, dLon = (lon2 - lon1) * .pi / 180
+        let h = pow(sin(dLat / 2), 2) + cos(a) * cos(b) * pow(sin(dLon / 2), 2)
+        return 6_371_000 * 2 * asin(sqrt(min(1, max(0, h))))
+    }
+}
+struct PhoneLocationFix {
+    let latitude: Double
+    let longitude: Double
+    let accuracy: Double
+    let time: Date
+}
+struct PhoneLocationWindow {
+    private(set) var samples: [PhoneLocationFix] = []
+    private(set) var rejectedJump = false
+    mutating func reset() { samples = []; rejectedJump = false }
+    @discardableResult mutating func add(_ fix: PhoneLocationFix, sessionStarted: Date, at now: Date) -> Bool {
+        if let last = samples.last, fix.time <= last.time { return false }
+        guard PlaceGeometry.valid(fix.latitude, fix.longitude), fix.accuracy.isFinite,
+              fix.accuracy > 0, fix.accuracy <= 20, fix.time >= sessionStarted,
+              (0...3).contains(now.timeIntervalSince(fix.time)) else {
+            reset(); return false
+        }
+        rejectedJump = false
+        if let last = samples.last, fix.time.timeIntervalSince(last.time) > 3 { samples = [] }
+        samples = samples.filter { (0...30).contains(now.timeIntervalSince($0.time)) }
+        // One outlier invalidates the cluster; several precise-looking samples are not enough.
+        if samples.contains(where: { PlaceGeometry.distance($0.latitude, $0.longitude, fix.latitude, fix.longitude) > 20 }) {
+            samples = []; rejectedJump = true
+        }
+        samples.append(fix); samples = Array(samples.suffix(40))
+        return true
+    }
+    func stable(at now: Date, minimumDuration: TimeInterval = 6) -> PhoneLocationFix? {
+        guard samples.count >= 5, let first = samples.first, let last = samples.last,
+              last.time.timeIntervalSince(first.time) >= minimumDuration,
+              (0...3).contains(now.timeIntervalSince(last.time)) else { return nil }
+        // Do not claim averaging improved system-reported accuracy.
+        let radius = samples.map(\.accuracy).max() ?? last.accuracy
+        return PhoneLocationFix(latitude: last.latitude, longitude: last.longitude, accuracy: radius, time: last.time)
+    }
+}
+
+/// A user-confirmed reference is separate from GPS and never silently expires.
+struct ManualPlaceReference: Codable {
+    let deviceID: String
+    let latitude: Double
+    let longitude: Double
+    let signalTime: Date
+    let rssi: Int
+    let source: String
+    let confirmedAt: Date
+    let note: String
+    var isValid: Bool {
+        !deviceID.isEmpty && PlaceGeometry.valid(latitude, longitude) && (-126 ... -1).contains(rssi)
+            && signalTime <= confirmedAt
+    }
+    func belongs(to id: String) -> Bool { isValid && deviceID == id }
 }

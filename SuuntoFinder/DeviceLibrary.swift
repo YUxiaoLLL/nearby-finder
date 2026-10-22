@@ -2,9 +2,46 @@ import Foundation
 import Combine
 
 enum DeviceKind: String, Codable, CaseIterable, Identifiable {
-    case watch = "手表／手环", headphones = "耳机", other = "其他 BLE 物品"
+    // Keep existing raw values so V0.9 collections still decode.
+    case watch = "手表／手环", headphones = "耳机", stylus = "Apple Pencil／触控笔"
+    case mouse = "蓝牙鼠标", keyboard = "蓝牙键盘", other = "其他 BLE 物品"
     var id: String { rawValue }
-    var icon: String { self == .watch ? "applewatch" : self == .headphones ? "headphones" : "shippingbox" }
+    var icon: String {
+        switch self {
+        case .watch: return "applewatch"
+        case .headphones: return "headphones"
+        case .stylus: return "pencil.tip"
+        case .mouse: return "computermouse"
+        case .keyboard: return "keyboard"
+        case .other: return "shippingbox"
+        }
+    }
+    var guidance: String {
+        switch self {
+        case .watch: return "Suunto 9 Peak Pro 有既往实测；其他手表仍需验证。通知转发不等于通用响铃。"
+        case .headphones: return "AirPods 请优先使用 Apple 查找。其他耳机仅在可发现 BLE 信号时辅助寻找，盒内、断电或休眠时可能不可见；没有通用发声控制。"
+        case .stylus: return "Apple Pencil Pro 优先使用 Apple 查找。其他代际与触控笔尚未实测，iPhone 不保证可发现；休眠后可能没有信号。"
+        case .mouse: return "仅对本 App 能发现的 BLE 鼠标尝试信号寻找；连接电脑、休眠或使用专用 2.4 GHz 接收器时可能不可见。没有响铃支持。"
+        case .keyboard: return "蓝牙键盘通常会休眠，连接其他设备后也可能停止广播。此类别不代表已兼容；没有响铃支持。"
+        case .other: return "必须有电且能被本 App 发现或恢复连接。类别、名称和广播信号都不能代替身份确认。"
+        }
+    }
+    var officialGuide: URL? {
+        switch self {
+        case .stylus: return URL(string: "https://support.apple.com/en-gb/guide/ipad/ipad445ff36d/ipados")
+        case .headphones: return URL(string: "https://support.apple.com/en-gb/109020")
+        default: return nil
+        }
+    }
+    static func suggested(for name: String) -> Self {
+        let value = name.lowercased()
+        if value.contains("pencil") || value.contains("stylus") { return .stylus }
+        if value.contains("keyboard") { return .keyboard }
+        if value.contains("mouse") { return .mouse }
+        if value.contains("airpod") || value.contains("headphone") || value.contains("earbud") { return .headphones }
+        if value.contains("suunto") || value.contains("watch") { return .watch }
+        return .other
+    }
 }
 enum NotificationSupport: String, Codable, CaseIterable, Identifiable {
     case untested = "未验证", confirmed = "我已确认会提醒", unavailable = "测试后未响应"

@@ -13,27 +13,29 @@ struct LastPlaceRecord: Codable, Identifiable {
     let rssi: Int
     let source: String
     var qualityVersion: Int? = nil
-    var id: String { deviceID }
+    var userRejected: Bool? = nil
+    var id: String { "\(deviceID)-\(signalTime.timeIntervalSince1970)" }
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
     var isValid: Bool {
-        CLLocationCoordinate2DIsValid(coordinate) && latitude.isFinite && longitude.isFinite
-            && accuracy.isFinite && (0...10000).contains(accuracy) && (-126 ... -1).contains(rssi)
+        PlaceGeometry.valid(latitude, longitude) && accuracy.isFinite && (0...10000).contains(accuracy)
+            && (-126 ... -1).contains(rssi) && locationTime <= signalTime
     }
 }
 
-/// Stores the PHONE's position at a contemporaneous valid watch signal, never the watch's GPS.
+/// Records the PHONE at a current signal. No location claim is made for the BLE item.
 final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var lastPlace: LastPlaceRecord?
+    @Published private(set) var manualReference: ManualPlaceReference?
     @Published private(set) var enabled = UserDefaults.standard.bool(forKey: "lastPlace.enabled")
-    @Published private(set) var status = "开启后，记录收到信号时手机的大概位置"
+    @Published private(set) var status = "开启后，记录收到信号时手机的位置参考"
     @Published private(set) var reducedAccuracy = false
-    @Published private(set) var alignment: LocalMapAlignment?
-    private var fixes: [CLLocation] = []
     @Published private(set) var authorizationDenied = false
+    @Published private(set) var automaticPaused = false
     private let manager = CLLocationManager()
     private var deviceID = ""
     private var seeking = false
-    private var latestLocation: CLLocation?
+    private var trackingStarted: Date?
+    private var window = PhoneLocationWindow()
     private var signal: (time: Date, rssi: Int, source: String)?
     private var key: String { "lastPlace.record.\(deviceID)" }
 
@@ -42,21 +44,41 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = kCLDistanceFilterNone
-        manager.pausesLocationUpdatesAutomatically = true
+        manager.pausesLocationUpdatesAutomatically = false
     }
     func setDevice(_ id: UUID?) {
         let value = id?.uuidString ?? ""
         guard deviceID != value else { return }
-        deviceID = value; signal = nil; latestLocation = nil; lastPlace = nil; fixes = []
-        alignment = UserDefaults.standard.data(forKey: key + ".alignment").flatMap { try? JSONDecoder().decode(LocalMapAlignment.self, from: $0) }
+        stopTracking()
+        deviceID = value; signal = nil; lastPlace = nil; manualReference = nil
+        automaticPaused = UserDefaults.standard.bool(forKey: key + ".paused")
         if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key),
            let saved = try? JSONDecoder().decode(LastPlaceRecord.self, from: data),
            saved.deviceID == value, saved.isValid { lastPlace = saved }
+        if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key + ".manual"),
+           let saved = try? JSONDecoder().decode(ManualPlaceReference.self, from: data), saved.belongs(to: value) {
+            manualReference = saved
+        }
+        preserveLegacyAlignment()
         updateTracking()
+    }
+    private func preserveLegacyAlignment() {
+        // Preserve a valid previous confirmation as a separate historical reference.
+        // Never carry a local offset over to new GPS samples or silently expire it.
+        guard manualReference == nil, let place = lastPlace,
+              let data = UserDefaults.standard.data(forKey: key + ".alignment"),
+              let old = try? JSONDecoder().decode(LocalMapAlignment.self, from: data),
+              PlaceGeometry.valid(old.mapLatitude, old.mapLongitude),
+              abs(place.signalTime.timeIntervalSince(old.time)) <= 60,
+              PlaceGeometry.distance(place.latitude, place.longitude, old.latitude, old.longitude) <= 30 else { return }
+        let ref = ManualPlaceReference(deviceID: deviceID, latitude: old.mapLatitude, longitude: old.mapLongitude,
+            signalTime: min(place.signalTime, old.time), rssi: place.rssi, source: place.source,
+            confirmedAt: old.time, note: "由旧版地图对齐保留，请核对历史时间")
+        saveManual(ref)
     }
     func setSeeking(_ active: Bool) {
         seeking = active
-        if !active { signal = nil; latestLocation = nil; fixes = [] }
+        if !active { signal = nil; stopTracking() }
         updateTracking()
     }
     func enable() {
@@ -68,114 +90,154 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
     }
     func disable() {
         enabled = false; UserDefaults.standard.set(false, forKey: "lastPlace.enabled")
-        signal = nil; latestLocation = nil; updateTracking()
+        stopTracking(); updateTracking()
     }
     func clear() {
-        lastPlace = nil; signal = nil
-        if !deviceID.isEmpty { UserDefaults.standard.removeObject(forKey: key) }
-        status = "此手表的位置记录已删除"
+        lastPlace = nil; manualReference = nil; signal = nil; automaticPaused = false
+        stopTracking()
+        if !deviceID.isEmpty {
+            for suffix in ["", ".manual", ".alignment", ".paused"] { UserDefaults.standard.removeObject(forKey: key + suffix) }
+        }
+        status = "此物品的自动位置、手动参考与旧对齐已删除"
+        updateTracking()
+    }
+    private func stopTracking() {
+        manager.stopUpdatingLocation(); trackingStarted = nil; window.reset()
     }
     private func updateTracking() {
         let auth = manager.authorizationStatus
         reducedAccuracy = manager.accuracyAuthorization == .reducedAccuracy
         authorizationDenied = auth == .denied || auth == .restricted
-        guard enabled else { manager.stopUpdatingLocation(); status = "位置记录已关闭"; return }
+        guard enabled else { stopTracking(); status = "自动位置记录已关闭；已有手动参考仍保留"; return }
         guard auth == .authorizedWhenInUse || auth == .authorizedAlways else {
-            manager.stopUpdatingLocation()
-            status = authorizationDenied ? "定位未授权，可在 iPhone 设置中开启；寻表和响铃仍可使用" : "等待定位授权"
+            stopTracking()
+            status = authorizationDenied ? "定位未授权；可手动确认已有信号的参考位置，或在设置中授权" : "等待定位授权"
             return
         }
-        guard seeking, !deviceID.isEmpty else { manager.stopUpdatingLocation(); status = "等待前台寻找并收到手表信号"; return }
-        status = reducedAccuracy ? "请开启精确位置；大概位置不再保存为寻找标记" : "正在检查定位精度与连续样本，误差需在 50 米内"
-        manager.startUpdatingLocation()
+        guard !automaticPaused else { stopTracking(); status = "已标记自动位置不可靠；可手动对齐，或点重新采集再试"; return }
+        guard seeking, !deviceID.isEmpty else { stopTracking(); status = "自动采样已暂停；历史记录和手动参考仍保留"; return }
+        guard !reducedAccuracy else { stopTracking(); status = "请开启精确位置；粗略位置不保存为标记"; return }
+        if trackingStarted == nil {
+            trackingStarted = Date(); window.reset()
+            status = "等待新定位：报告不确定范围需 ≤20 米，连续稳定至少 6 秒"
+            manager.startUpdatingLocation()
+        }
     }
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) { updateTracking() }
     func observeSignal(rssi: Int, source: String, at time: Date) {
-        guard enabled, seeking, !deviceID.isEmpty else { return }
+        guard seeking, !deviceID.isEmpty, (-126 ... -1).contains(rssi) else { return }
         signal = (time, rssi, source)
-        if let latestLocation { saveIfContemporaneous(latestLocation, at: time) }
+        saveIfContemporaneous(at: time)
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard enabled, seeking, !deviceID.isEmpty else { return }
+        guard enabled, seeking, !automaticPaused, !deviceID.isEmpty, let started = trackingStarted,
+              manager.accuracyAuthorization == .fullAccuracy else { return }
         let now = Date()
-        guard let fix = locations.filter({
-            CLLocationCoordinate2DIsValid($0.coordinate) && $0.horizontalAccuracy >= 0
-                && (0...10).contains(now.timeIntervalSince($0.timestamp))
-        }).max(by: { $0.timestamp < $1.timestamp }) else { return }
-        guard !reducedAccuracy, fix.horizontalAccuracy <= 50 else {
-            status = "定位精度不足（约 ±\(Int(ceil(fix.horizontalAccuracy))) 米），保留旧记录；请开启精确位置或到窗边重试"
-            latestLocation = nil; fixes = []; return
+        // Process individual samples, not merely the final element in a batch.
+        for fix in locations.sorted(by: { $0.timestamp < $1.timestamp }) {
+            let sample = PhoneLocationFix(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude,
+                accuracy: fix.horizontalAccuracy, time: fix.timestamp)
+            let accepted = window.add(sample, sessionStarted: started, at: now)
+            if !accepted {
+                status = "定位缓存、过期或不确定范围过大；保留历史参考，等待新样本"
+                continue
+            }
+            if window.rejectedJump { status = "检测到定位跳动，重新等待稳定样本" }
         }
-        if let previous = fixes.last, fix.timestamp <= previous.timestamp { return }
-        if let previous = fixes.last, fix.distance(from: previous) > max(40, fix.horizontalAccuracy + previous.horizontalAccuracy) {
-            fixes = []; latestLocation = nil; status = "检测到定位跳动，等待稳定后再记录"
-        }
-        fixes.append(fix); fixes = Array(fixes.filter { now.timeIntervalSince($0.timestamp) <= 10 }.suffix(5))
-        guard fixes.count >= 3, let first = fixes.first, fix.timestamp.timeIntervalSince(first.timestamp) >= 2 else { return }
-        latestLocation = fix
-        saveIfContemporaneous(fix, at: now)
+        saveIfContemporaneous(at: now)
     }
-    private func saveIfContemporaneous(_ location: CLLocation, at now: Date) {
-        guard let signal, LastPlacePolicy.canAssociate(locationTime: location.timestamp,
-            accuracy: location.horizontalAccuracy, signalTime: signal.time, at: now) else { return }
-        guard manager.accuracyAuthorization == .fullAccuracy else { return }
-        if let lastPlace {
-            if lastPlace.signalTime > signal.time { return }
-            if now.timeIntervalSince(lastPlace.signalTime) < 20,
-               location.horizontalAccuracy > max(20, lastPlace.accuracy * 2) { return }
+    private func saveIfContemporaneous(at now: Date) {
+        guard enabled, seeking, !automaticPaused, trackingStarted != nil,
+              manager.accuracyAuthorization == .fullAccuracy, let signal else { return }
+        var duration: TimeInterval = 6
+        if let old = lastPlace, let recent = window.samples.last,
+           now.timeIntervalSince(old.signalTime) < 60,
+           PlaceGeometry.distance(old.latitude, old.longitude, recent.latitude, recent.longitude) > 150 {
+            duration = 20
         }
-        let record = LastPlaceRecord(deviceID: deviceID, latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude, accuracy: location.horizontalAccuracy,
-            locationTime: location.timestamp, signalTime: signal.time, rssi: signal.rssi, source: signal.source, qualityVersion: 2)
+        guard let location = window.stable(at: now, minimumDuration: duration) else {
+            if !window.samples.isEmpty {
+                status = duration > 6 ? "新位置与旧记录差距较大，需稳定 20 秒再更新" : "正在积累稳定定位（至少 5 个样本、跨度 6 秒）"
+            }
+            return
+        }
+        guard LastPlacePolicy.canAssociate(locationTime: location.time, accuracy: location.accuracy,
+            signalTime: signal.time, at: now) else { return }
+        if let old = lastPlace, old.signalTime >= signal.time { return }
+        let record = LastPlaceRecord(deviceID: deviceID, latitude: location.latitude, longitude: location.longitude,
+            accuracy: location.accuracy, locationTime: location.time, signalTime: signal.time,
+            rssi: signal.rssi, source: signal.source, qualityVersion: 3)
         guard record.isValid else { return }
         lastPlace = record
         if let data = try? JSONEncoder().encode(record) { UserDefaults.standard.set(data, forKey: key) }
-        status = "已保存收到信号时手机的位置"
+        status = "已保存近期稳定的手机位置；系统不确定范围不是准确性保证"
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        guard enabled, seeking else { return }
-        status = "暂未取得可用位置，保留已有记录；室内可到窗边重试"
+        window.reset()
+        if enabled && seeking { status = "暂未取得可用定位，保留历史记录；可手动确认参考位置" }
     }
     func improveLocation() {
-        fixes = []; latestLocation = nil
-        enable()
-        if (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways), manager.accuracyAuthorization == .reducedAccuracy {
+        automaticPaused = false; UserDefaults.standard.removeObject(forKey: key + ".paused")
+        stopTracking(); enable()
+        if (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways),
+           manager.accuracyAuthorization == .reducedAccuracy {
             manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "FindWatchLocation") { [weak self] _ in
                 DispatchQueue.main.async { self?.updateTracking() }
             }
         } else { updateTracking() }
     }
-    func displayCoordinate(for place: LastPlaceRecord) -> CLLocationCoordinate2D {
-        guard let alignment, alignment.applies(latitude: place.latitude, longitude: place.longitude, at: Date()) else { return place.coordinate }
-        return CLLocationCoordinate2D(latitude: place.latitude + alignment.mapLatitude - alignment.latitude,
-                                      longitude: place.longitude + alignment.mapLongitude - alignment.longitude)
+    func rejectAutomaticLocation() {
+        guard var place = lastPlace else { return }
+        place.userRejected = true; lastPlace = place; automaticPaused = true
+        if let data = try? JSONEncoder().encode(place) { UserDefaults.standard.set(data, forKey: key) }
+        UserDefaults.standard.set(true, forKey: key + ".paused")
+        stopTracking(); status = "自动位置已标记为不可靠并暂停更新；请手动对齐或重新采集"
     }
-    func aligned(_ place: LastPlaceRecord) -> Bool {
-        alignment?.applies(latitude: place.latitude, longitude: place.longitude, at: Date()) ?? false
-    }
-    func calibrateMap(_ place: LastPlaceRecord, selected: CLLocationCoordinate2D) -> Bool {
-        guard let signal, Date().timeIntervalSince(signal.time) < 8,
-              let live = latestLocation, Date().timeIntervalSince(live.timestamp) < 10,
-              live.distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude)) < 30,
-              place.deviceID == deviceID, place.qualityVersion == 2,
-              CLLocationCoordinate2DIsValid(selected),
-              CLLocation(latitude: place.latitude, longitude: place.longitude).distance(from: CLLocation(latitude: selected.latitude, longitude: selected.longitude)) <= 1500 else {
-            status = "请保持原地、持续收到信号并取得精确位置后再校准；所选偏移需在 1.5 公里内"; return false
+    var calibrationReference: LastPlaceRecord? {
+        if let signal, (0...8).contains(Date().timeIntervalSince(signal.time)) {
+            let fix = window.stable(at: Date())
+            return LastPlaceRecord(deviceID: deviceID, latitude: fix?.latitude ?? lastPlace?.latitude ?? 0,
+                longitude: fix?.longitude ?? lastPlace?.longitude ?? 0, accuracy: fix?.accuracy ?? 10000,
+                locationTime: min(fix?.time ?? signal.time, signal.time), signalTime: signal.time,
+                rssi: signal.rssi, source: signal.source, qualityVersion: 3)
         }
-        alignment = LocalMapAlignment(latitude: place.latitude, longitude: place.longitude,
-            mapLatitude: selected.latitude, mapLongitude: selected.longitude, time: Date())
-        if let data = try? JSONEncoder().encode(alignment) { UserDefaults.standard.set(data, forKey: key + ".alignment") }
-        status = "已按你确认的位置对齐地图；仅对附近 1 公里、24 小时内有效"
+        if let manualReference { return displayRecord(manualReference) }
+        return lastPlace
+    }
+    func calibrateMap(_ reference: LastPlaceRecord, selected: CLLocationCoordinate2D, note: String) -> Bool {
+        guard reference.deviceID == deviceID, reference.isValid,
+              PlaceGeometry.valid(selected.latitude, selected.longitude), reference.signalTime <= Date() else {
+            status = "设备或信号记录已变化，请重新打开手动对齐"; return false
+        }
+        let ref = ManualPlaceReference(deviceID: deviceID, latitude: selected.latitude, longitude: selected.longitude,
+            signalTime: reference.signalTime, rssi: reference.rssi, source: reference.source,
+            confirmedAt: Date(), note: String(note.prefix(120)))
+        guard ref.isValid else { return false }
+        saveManual(ref)
+        status = "手动参考已保存；不会过期或被自动定位覆盖，不表示实时设备位置"
         return true
     }
-    func resetMapCalibration() {
-        alignment = nil; UserDefaults.standard.removeObject(forKey: key + ".alignment")
-        status = "已恢复原始坐标显示"
+    private func saveManual(_ reference: ManualPlaceReference) {
+        manualReference = reference
+        if let data = try? JSONEncoder().encode(reference) { UserDefaults.standard.set(data, forKey: key + ".manual") }
     }
-    func openMap() {
-        guard let place = lastPlace else { return }
-        let item = MKMapItem(placemark: MKPlacemark(coordinate: displayCoordinate(for: place)))
-        item.name = "收到 Suunto 信号时的手机位置"
+    func resetMapCalibration() {
+        manualReference = nil
+        UserDefaults.standard.removeObject(forKey: key + ".manual")
+        UserDefaults.standard.removeObject(forKey: key + ".alignment")
+        status = "手动参考已撤销；原始自动定位记录保持不变"
+    }
+    func displayRecord(_ reference: ManualPlaceReference) -> LastPlaceRecord {
+        LastPlaceRecord(deviceID: reference.deviceID, latitude: reference.latitude, longitude: reference.longitude,
+            accuracy: 0, locationTime: reference.signalTime, signalTime: reference.signalTime,
+            rssi: reference.rssi, source: reference.source, qualityVersion: 3)
+    }
+    func openMap(manual: Bool = false) {
+        let place: LastPlaceRecord?
+        if manual, let reference = manualReference { place = displayRecord(reference) } else { place = lastPlace }
+        guard let place else { return }
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
+        item.name = manual ? "手动确认的手机位置参考" : "收到物品信号时的手机位置（非物品坐标）"
         item.openInMaps(launchOptions: nil)
     }
 }

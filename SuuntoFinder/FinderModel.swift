@@ -97,7 +97,7 @@ final class FinderModel: NSObject, ObservableObject, CBCentralManagerDelegate, C
         // All model mutations and delegate callbacks use the main queue.
         central = CBCentralManager(delegate: self, queue: .main)
         clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        record("launch", ["version":"0.9-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
+        record("launch", ["version":"0.10-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
     }
 
     func record(_ event: String, _ data: [String: Any] = [:]) {
@@ -239,7 +239,7 @@ final class FinderModel: NSObject, ObservableObject, CBCentralManagerDelegate, C
             watchSound.setDevice(nil); lastPlace.setDevice(nil); signalGuide.setDevice(nil)
         }
         library.remove(id)
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("watchSound.\(id.uuidString).") || key == "lastPlace.record.\(id.uuidString)" || key == "lastPlace.record.\(id.uuidString).alignment" {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("watchSound.\(id.uuidString).") || key == "lastPlace.record.\(id.uuidString)" || key.hasPrefix("lastPlace.record.\(id.uuidString).") {
             defaults.removeObject(forKey: key)
         }
     }
