@@ -254,3 +254,28 @@ func checkSignalContextWithoutGPS() {
     print("PASS: manual-confirmation signal context survives pause/restart without GPS; device isolation and older-event rejection")
 }
 checkSignalContextWithoutGPS()
+
+func checkAutomaticDisplayAlignment() {
+    let t = Date(timeIntervalSince1970: 12000)
+    var window = PhoneLocationWindow()
+    let first = PhoneLocationFix(latitude: 23, longitude: 113, accuracy: 15, time: t)
+    assert(window.add(first, sessionStarted: t, at: t))
+    assert(window.candidate(at: t)?.latitude == 23) // first fresh fix need not wait for five callbacks
+    assert(window.candidate(at: t.addingTimeInterval(4)) == nil)
+    let jump = PhoneLocationFix(latitude: 23.01, longitude: 113, accuracy: 15, time: t.addingTimeInterval(1))
+    assert(window.add(jump, sessionStarted: t, at: jump.time))
+    assert(window.candidate(at: jump.time) == nil)
+    let next = PhoneLocationFix(latitude: 23.01, longitude: 113, accuracy: 15, time: t.addingTimeInterval(2))
+    assert(window.add(next, sessionStarted: t, at: next.time))
+    assert(window.candidate(at: next.time) == nil) // jump protection survives another callback
+    let alignment = PlaceDisplayAlignment(deviceID: "watch", latitude: 23, longitude: 113,
+        targetLatitude: 23.001, targetLongitude: 113.002)
+    let restored = try! JSONDecoder().decode(PlaceDisplayAlignment.self, from: JSONEncoder().encode(alignment))
+    let point = restored.corrected(deviceID: "watch", latitude: 23.0001, longitude: 113.0001)!
+    assert(abs(point.0 - 23.0011) < 0.000001 && abs(point.1 - 113.0021) < 0.000001)
+    assert(restored.corrected(deviceID: "other", latitude: 23, longitude: 113) == nil)
+    assert(restored.corrected(deviceID: "watch", latitude: 24, longitude: 113) == nil)
+    assert(restored.corrected(deviceID: "watch", latitude: .nan, longitude: 113) == nil)
+    print("PASS: immediate fresh automatic fixes, persistent jump protection, local correction persistence/movement/device isolation")
+}
+checkAutomaticDisplayAlignment()
