@@ -1,23 +1,25 @@
-# Location references in V0.10 / 位置参考
+# Location references in V0.11
 
-A Bluetooth device does not provide its coordinates here. Every automatic point is the **phone's** position around a valid signal. Indoor GPS can be systematically wrong even when reported uncertainty looks small. We cannot guarantee an exact last device location.
+The default flow is **automatic phone location → map → manual alignment if incorrect**. Pairing does not supply the watch's coordinates. Location records belong to the phone around a valid Bluetooth sighting; they are search references, not live item tracking.
 
-## Changes
+## Recording
 
-- Manual map confirmation is visible directly, not hidden behind live-scan or GPS-quality requirements. A current or historical signal context is required; there is no fabricated location for a never-observed item.
-- Manual confirmation saves a separate historical point, note and timestamps. It does not silently expire, overwrite raw GPS or get replaced by automatic updates. If you move the item, update or remove the old reference.
-- Automatic recording requires fresh fixes from this sampling session, reported uncertainty ≤20m, at least five samples over six stable seconds and location/signal association within three seconds. Gaps and jumps restart the window. Large quick changes wait longer.
-- Mark a wrong automatic point to pause updates; explicitly retry collection to resume. User-confirmed references remain available.
-- Existing automatic records are labeled as older evidence. A legacy alignment is migrated only when it can be associated with the saved evidence; no local offset is applied to arbitrary future fixes.
-- No guessed WGS84/GCJ02 conversion is added. [Apple coordinates](https://developer.apple.com/documentation/corelocation/cllocationcoordinate2d) use WGS84; blind conversion may add another error. [horizontalAccuracy](https://developer.apple.com/documentation/corelocation/cllocation/horizontalaccuracy) is reported uncertainty, not an accuracy guarantee.
+An explicit foreground search requests location permission if needed. An explicit recording-off preference remains respected. Fresh full-accuracy fixes from this session with reported uncertainty ≤20m may be recorded immediately when associated with a current signal within three seconds. This fixes V0.10's dependence on five rapid callbacks. Invalid, stale, after-signal and coarse fixes are rejected. A detected cluster jump waits for stable evidence; a large quick change from the saved record waits longer. Indoor fixes can still be wrong despite a small reported uncertainty.
 
-## Physical-device checklist
+## Manual alignment
 
-1. At a known real place, compare timestamps and the app's automatic phone reference with Apple Maps; two map displays sharing a wrong system fix are not proof of accuracy.
-2. Open manual confirmation, search or pan to the known phone position for the shown signal time, add a room/floor note, confirm and save. Restart and recheck the next day. No GPS uncertainty circle is shown for a manual point.
-3. Receive new signals elsewhere: automatic history may update, but manual history must keep its own original time and note. Never treat an old manual point as the live item location.
-4. Mark an automatic record wrong; ensure it pauses rather than immediately replacing the warning. Retry collection and wait for new stable samples.
-5. Switch two owned devices, verify independent records and remove one; no records or settings may leak across identities.
-6. With no prior signal, or when automatic sampling fails, no accurate-looking automatic point should be invented. After a valid signal, manual confirmation can still be used without a qualifying GPS fix.
+Use “位置不准？手动对齐” and confirm the actual phone position for the shown signal time. A matching raw phone fix establishes a persistent display correction for this device within 500m of that raw anchor. Subsequent automatic records retain their motion relative to that anchor; they are not frozen at the manually selected point. Outside that area the app explicitly uses system coordinates. Corrections greater than 2km are not applied automatically. Raw GPS remains unchanged; reset is under location details.
 
-手动点与自动点分别保存并显示历史时间。新增类别不会提供 Apple Find My 网络数据、室内房间或楼层定位。已确认的软件入口及记录问题已改进；用户报告的大偏移尚需真机重现，不能声称其根因已被完全定位或 GPS 已达到绝对准确。
+A manual-only historical point remains available, but cannot define an offset without a corresponding real phone fix. V0.10 confirmations migrate to correction only when their signal time matches the saved raw evidence within three seconds. Otherwise obtain a fresh signal and location and align again. We do not assume two positions taken many minutes apart describe the same place.
+
+No guessed country-wide datum conversion is applied. Map alignment changes display, not GPS accuracy, and cannot establish room/floor or the item's own position.
+
+## Device testing
+
+1. Allow precise location, start searching and verify a new map timestamp at a known place.
+2. Align the shown phone position, then walk nearby: new automatic records should retain the correction while moving.
+3. Restart, switch between devices, reset alignment and leave the 500m region; verify state labels and isolation.
+4. Deny permission / disable recording / stop searching: no new location should be invented; historical references remain.
+5. Retest signal trends and the four notification reminders at 5/10/15/20 seconds.
+
+Policy regression checks and unsigned generic iOS builds pass. Actual GPS accuracy and notification delivery must be tested on a physical phone/watch.
