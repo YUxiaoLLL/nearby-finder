@@ -1,25 +1,27 @@
-# Location references in V0.11
+# Location coordinate pipeline — V0.12
 
-The default flow is **automatic phone location → map → manual alignment if incorrect**. Pairing does not supply the watch's coordinates. Location records belong to the phone around a valid Bluetooth sighting; they are search references, not live item tracking.
+## What the phone test found
 
-## Recording
+The previous implementation saved Core Location coordinates without changing them, then plotted them on MapKit directly or applied a manual offset. On a physical iPhone in the reported map environment, Core Location and MapKit user-location coordinates differed by about 626m. A reported uncertainty of a few meters did not explain this coordinate-space difference. Requiring better GPS precision or permanently moving a manual pin did not resolve the underlying mismatch.
 
-An explicit foreground search requests location permission if needed. An explicit recording-off preference remains respected. Fresh full-accuracy fixes from this session with reported uncertainty ≤20m may be recorded immediately when associated with a current signal within three seconds. This fixes V0.10's dependence on five rapid callbacks. Invalid, stale, after-signal and coarse fixes are rejected. A detected cluster jump waits for stable evidence; a large quick change from the saved record waits longer. Indoor fixes can still be wrong despite a small reported uncertainty.
+## Current implementation
 
-## Manual alignment
+1. Receive an owned device's valid Bluetooth signal during foreground searching.
+2. Preserve a recent qualifying Core Location fix, timestamp and reported uncertainty as raw phone evidence; it must precede the signal and meet the existing three-second association checks.
+3. Also observe MapKit's user location in the active app window. Match it to a phone fix within one second, each reporting uncertainty ≤20m. Only past/current timestamps up to ten seconds old can establish a pair.
+4. MapKit was observed to emit slightly predictive timestamps. Retain samples up to two seconds ahead, wait for their time to arrive, then attempt pairing. Do not relabel future samples as current.
+5. Use the measured local relation to produce a map coordinate, saved separately from the original raw coordinate. The relation is bounded to 500m around its phone anchor and one hour; fresh pairs keep it updated. This is a local measured relation, not a guessed country-wide datum conversion or a GPS accuracy improvement.
+6. Pass that map coordinate to the actual annotation and verify that its coordinate matches the input. If no validated map coordinate is available, explain the waiting state instead of drawing a misleading unverified pin.
 
-Use “位置不准？手动对齐” and confirm the actual phone position for the shown signal time. A matching raw phone fix establishes a persistent display correction for this device within 500m of that raw anchor. Subsequent automatic records retain their motion relative to that anchor; they are not frozen at the manually selected point. Outside that area the app explicitly uses system coordinates. Corrections greater than 2km are not applied automatically. Raw GPS remains unchanged; reset is under location details.
+Raw coordinates, map coordinates, signal/location timing and the annotation check are available in local location details. Neither coordinates nor device logs are uploaded by the app. Explicit developer audit launch modes keep temporary evidence locally; ordinary launch clears temporary audit keys.
 
-A manual-only historical point remains available, but cannot define an offset without a corresponding real phone fix. V0.10 confirmations migrate to correction only when their signal time matches the saved raw evidence within three seconds. Otherwise obtain a fresh signal and location and align again. We do not assume two positions taken many minutes apart describe the same place.
+## Manual alignment and migration
 
-No guessed country-wide datum conversion is applied. Map alignment changes display, not GPS accuracy, and cannot establish room/floor or the item's own position.
+Manual confirmation remains available and preserves its historical time/note. New manual alignment directly maps raw phone evidence to a selected map point; it replaces, rather than stacks on, the system-map relation. V0.11 offsets had no verified map-coordinate provenance and no longer apply automatically. Their historical manual references remain accessible. Clearing a device's location data removes its raw/map records and matching cache.
 
-## Device testing
+## Validation and limits
 
-1. Allow precise location, start searching and verify a new map timestamp at a known place.
-2. Align the shown phone position, then walk nearby: new automatic records should retain the correction while moving.
-3. Restart, switch between devices, reset alignment and leave the 500m region; verify state labels and isolation.
-4. Deny permission / disable recording / stop searching: no new location should be invented; historical references remain.
-5. Retest signal trends and the four notification reminders at 5/10/15/20 seconds.
-
-Policy regression checks and unsigned generic iOS builds pass. Actual GPS accuracy and notification delivery must be tested on a physical phone/watch.
+- Physical iPhone test in the normal UI produced paired system samples and automatic records with a separate map-coordinate source.
+- Final saved map coordinate and actual annotation coordinate matched exactly. Comparison with the latest system-map blue point was within a meter in the stationary test; this is software consistency, not sub-meter real-world positioning.
+- Policy checks cover predictive timestamps, future/stale rejection, paired timing/accuracy, raw preservation, identity mapping, regional/age limits, plus existing signal/notification/device-library behavior.
+- Different regions, map environments, moving routes, permission changes and background/resume still need broader physical-device coverage. Indoor phone positioning can be wrong and does not establish the item's own location, room or floor.
