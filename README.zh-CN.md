@@ -7,7 +7,7 @@
 [English](README.md) · [兼容表 / Compatibility](docs/COMPATIBILITY.md) · [隐私 / Privacy](docs/PRIVACY.md) · [参与测试 / Testing](docs/TESTING.md)
 
 > **状态：V0.13 开发预览，源码可自编译。尚无公开 TestFlight 或 App Store 安装入口。**
-> 中英文说明已提供；当前 App 界面主要为简体中文。演示视频待补充，见[视频说明](docs/media/README.md)。
+> App 支持中英文切换，点击左上角地球图标，选择会自动保存。[观看 37 秒演示短片](https://github.com/YUxiaoLLL/nearby-finder/releases/tag/v0.13.0-demo)。
 
 ## 为什么写这个工具
 

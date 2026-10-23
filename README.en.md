@@ -9,7 +9,7 @@ An experimental native iOS app that uses Bluetooth signal trends to narrow your 
 [简体中文](README.zh-CN.md) · [Compatibility](docs/COMPATIBILITY.md) · [Privacy](docs/PRIVACY.md) · [Testing](docs/TESTING.md)
 
 > **Status: V0.13 development preview. Source builds only; no public TestFlight or App Store download yet.**
-> Documentation is bilingual. The app UI supports English and Simplified Chinese. Use the globe icon at the top left to switch; your choice is remembered. A real-device demo video is planned; see [media notes](docs/media/README.md).
+> Documentation is bilingual. The app UI supports English and Simplified Chinese. Use the globe icon at the top left to switch; your choice is remembered. [Watch the 37-second edited demo](https://github.com/YUxiaoLLL/nearby-finder/releases/tag/v0.13.0-demo).
 
 ## Why I built this
 
