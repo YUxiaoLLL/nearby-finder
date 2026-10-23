@@ -108,7 +108,7 @@ enum PlaceGeometry {
         return 6_371_000 * 2 * asin(sqrt(min(1, max(0, h))))
     }
 }
-struct PhoneLocationFix {
+struct PhoneLocationFix: Codable {
     let latitude: Double
     let longitude: Double
     let accuracy: Double
@@ -198,6 +198,7 @@ struct PlaceDisplayAlignment: Codable {
     let longitude: Double
     let targetLatitude: Double
     let targetLongitude: Double
+    var version: Int? = nil
     func corrected(deviceID id: String, latitude lat: Double, longitude lon: Double) -> (Double, Double)? {
         guard id == deviceID, !id.isEmpty,
               PlaceGeometry.valid(latitude, longitude), PlaceGeometry.valid(targetLatitude, targetLongitude),
@@ -207,4 +208,35 @@ struct PlaceDisplayAlignment: Codable {
         let result = (lat + targetLatitude - latitude, lon + targetLongitude - longitude)
         return PlaceGeometry.valid(result.0, result.1) ? result : nil
     }
+}
+
+/// Measured from this phone's two public APIs, never a guessed country-wide conversion.
+struct SystemMapBridge: Codable {
+    let phone: PhoneLocationFix
+    let map: PhoneLocationFix
+    let observedAt: Date
+    // MapKit can emit a slightly predictive timestamp. Queue it, but never use it
+    // for pairing until the timestamp has actually arrived.
+    static func canQueue(_ fix: PhoneLocationFix, at now: Date) -> Bool {
+        PlaceGeometry.valid(fix.latitude, fix.longitude) && fix.accuracy.isFinite && fix.accuracy > 0 && fix.accuracy <= 20
+            && (-2...20).contains(now.timeIntervalSince(fix.time))
+    }
+    static func pair(phone: PhoneLocationFix, map: PhoneLocationFix, at now: Date) -> SystemMapBridge? {
+        guard PlaceGeometry.valid(phone.latitude, phone.longitude), PlaceGeometry.valid(map.latitude, map.longitude),
+              phone.accuracy.isFinite, map.accuracy.isFinite,
+              phone.accuracy > 0, phone.accuracy <= 20, map.accuracy > 0, map.accuracy <= 20,
+              abs(phone.time.timeIntervalSince(map.time)) <= 1,
+              (0...10).contains(now.timeIntervalSince(phone.time)),
+              (0...10).contains(now.timeIntervalSince(map.time)),
+              PlaceGeometry.distance(phone.latitude, phone.longitude, map.latitude, map.longitude) <= 2000 else { return nil }
+        return SystemMapBridge(phone: phone, map: map, observedAt: now)
+    }
+    func coordinate(latitude: Double, longitude: Double, at now: Date) -> (Double, Double)? {
+        guard (0...3600).contains(now.timeIntervalSince(observedAt)),
+              PlaceGeometry.valid(latitude, longitude),
+              PlaceGeometry.distance(phone.latitude, phone.longitude, latitude, longitude) <= 500 else { return nil }
+        let result = (latitude + map.latitude - phone.latitude, longitude + map.longitude - phone.longitude)
+        return PlaceGeometry.valid(result.0, result.1) ? result : nil
+    }
+    var offset: Double { PlaceGeometry.distance(phone.latitude, phone.longitude, map.latitude, map.longitude) }
 }

@@ -12,6 +12,10 @@ struct LastPlaceRecord: Codable, Identifiable {
     let signalTime: Date
     let rssi: Int
     let source: String
+    // Raw latitude/longitude always stay in Core Location's coordinate space.
+    var mapLatitude: Double? = nil
+    var mapLongitude: Double? = nil
+    var mapSource: String? = nil
     var qualityVersion: Int? = nil
     var userRejected: Bool? = nil
     var id: String { "\(deviceID)-\(signalTime.timeIntervalSince1970)" }
@@ -25,6 +29,14 @@ struct LastPlaceRecord: Codable, Identifiable {
 /// Records the PHONE at a current signal. No location claim is made for the BLE item.
 final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var lastPlace: LastPlaceRecord?
+    @Published private(set) var systemMapBridge: SystemMapBridge?
+    @Published private(set) var renderedDifference: Double?
+    private var phoneFixes: [PhoneLocationFix] = []
+    private var mapFixes: [PhoneLocationFix] = []
+    var shouldMatchSystemMap: Bool {
+        enabled && seeking && !reducedAccuracy &&
+            (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways)
+    }
     @Published private(set) var alignment: PlaceDisplayAlignment?
     @Published private(set) var manualReference: ManualPlaceReference?
     @Published private(set) var enabled = (UserDefaults.standard.object(forKey: "lastPlace.enabled") as? Bool ?? true)
@@ -55,7 +67,7 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         persistSignal()
         stopTracking()
         deviceID = value; signalHistory = PlaceSignalHistory(); signalPersistedAt = nil
-        lastPlace = nil; manualReference = nil; alignment = nil
+        lastPlace = nil; manualReference = nil; alignment = nil; systemMapBridge = nil; renderedDifference = nil; phoneFixes = []; mapFixes = []
         if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key + ".signal"),
            let saved = try? JSONDecoder().decode(PlaceSignalEvidence.self, from: data), saved.time <= Date() {
             signalHistory = PlaceSignalHistory(restored: saved, deviceID: value)
@@ -63,7 +75,10 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         automaticPaused = false
         UserDefaults.standard.removeObject(forKey: key + ".paused")
         if let data = UserDefaults.standard.data(forKey: key + ".correction") {
-            alignment = try? JSONDecoder().decode(PlaceDisplayAlignment.self, from: data)
+            let saved = try? JSONDecoder().decode(PlaceDisplayAlignment.self, from: data)
+            // V0.11 offsets had no map-coordinate provenance. Keep the manual history,
+            // but do not apply an unverified old offset to fresh automatic records.
+            alignment = saved?.version == 2 ? saved : nil
         }
         if !value.isEmpty, let data = UserDefaults.standard.data(forKey: key),
            let saved = try? JSONDecoder().decode(LastPlaceRecord.self, from: data),
@@ -73,16 +88,8 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
             manualReference = saved
         }
         preserveLegacyAlignment()
-        // Migrate only a confirmation tied to the same actual fix; unrelated historical points cannot define an offset.
-        if alignment == nil, let raw = lastPlace, let manual = manualReference,
-           abs(raw.signalTime.timeIntervalSince(manual.signalTime)) <= 3,
-           raw.accuracy > 0 && raw.accuracy <= 20 {
-            let correction = PlaceDisplayAlignment(deviceID: deviceID, latitude: raw.latitude, longitude: raw.longitude,
-                targetLatitude: manual.latitude, targetLongitude: manual.longitude)
-            if correction.corrected(deviceID: deviceID, latitude: raw.latitude, longitude: raw.longitude) != nil {
-                alignment = correction
-                if let data = try? JSONEncoder().encode(correction) { UserDefaults.standard.set(data, forKey: key + ".correction") }
-            }
+        if let data = UserDefaults.standard.data(forKey: key + ".mapBridge") {
+            systemMapBridge = try? JSONDecoder().decode(SystemMapBridge.self, from: data)
         }
         updateTracking()
     }
@@ -118,10 +125,10 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         stopTracking(); updateTracking()
     }
     func clear() {
-        lastPlace = nil; manualReference = nil; alignment = nil; signalHistory = PlaceSignalHistory(); signalPersistedAt = nil; automaticPaused = false
+        lastPlace = nil; manualReference = nil; alignment = nil; systemMapBridge = nil; renderedDifference = nil; phoneFixes = []; mapFixes = []; signalHistory = PlaceSignalHistory(); signalPersistedAt = nil; automaticPaused = false
         stopTracking()
         if !deviceID.isEmpty {
-            for suffix in ["", ".manual", ".alignment", ".paused", ".signal", ".correction"] { UserDefaults.standard.removeObject(forKey: key + suffix) }
+            for suffix in ["", ".manual", ".alignment", ".paused", ".signal", ".correction", ".mapBridge", ".renderAudit"] { UserDefaults.standard.removeObject(forKey: key + suffix) }
         }
         status = "此物品的自动位置、手动参考与旧对齐已删除"
         updateTracking()
@@ -164,6 +171,16 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         for fix in locations.sorted(by: { $0.timestamp < $1.timestamp }) {
             let sample = PhoneLocationFix(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude,
                 accuracy: fix.horizontalAccuracy, time: fix.timestamp)
+            if ProcessInfo.processInfo.arguments.contains("--location-audit") {
+                UserDefaults.standard.set(["latitude": sample.latitude, "longitude": sample.longitude,
+                    "accuracy": sample.accuracy, "time": sample.time.timeIntervalSince1970], forKey: "locationAudit.core")
+            }
+            if PlaceGeometry.valid(sample.latitude, sample.longitude), sample.accuracy > 0, sample.accuracy <= 20,
+               (0...10).contains(now.timeIntervalSince(sample.time)) {
+                phoneFixes.append(sample)
+                phoneFixes = Array(phoneFixes.filter { (0...20).contains(now.timeIntervalSince($0.time)) }.suffix(40))
+                matchSystemMap(at: now)
+            }
             let accepted = window.add(sample, sessionStarted: started, at: now)
             if !accepted {
                 status = "定位缓存、过期或不确定范围过大；保留历史参考，等待新样本"
@@ -193,13 +210,68 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         guard LastPlacePolicy.canAssociate(locationTime: location.time, accuracy: location.accuracy,
             signalTime: signal.time, at: now) else { return }
         if let old = lastPlace, old.signalTime >= signal.time { return }
-        let record = LastPlaceRecord(deviceID: deviceID, latitude: location.latitude, longitude: location.longitude,
+        var record = LastPlaceRecord(deviceID: deviceID, latitude: location.latitude, longitude: location.longitude,
             accuracy: location.accuracy, locationTime: location.time, signalTime: signal.time,
             rssi: signal.rssi, source: signal.source, qualityVersion: 3)
+        if let coordinate = systemMapBridge?.coordinate(latitude: record.latitude, longitude: record.longitude, at: now) {
+            record.mapLatitude = coordinate.0; record.mapLongitude = coordinate.1; record.mapSource = "paired-system-map"
+        }
         guard record.isValid else { return }
         lastPlace = record
         if let data = try? JSONEncoder().encode(record) { UserDefaults.standard.set(data, forKey: key) }
         status = "已自动记录收到信号时的手机位置"
+    }
+    func observeSystemMap(_ location: CLLocation, source: String = "normal-map") {
+        if ProcessInfo.processInfo.arguments.contains("--location-audit") {
+            UserDefaults.standard.set(["enabled": enabled, "seeking": seeking, "reduced": reducedAccuracy,
+                "authorized": manager.authorizationStatus.rawValue, "time": Date().timeIntervalSince1970],
+                forKey: "locationAudit.probeState")
+        }
+        guard shouldMatchSystemMap else { return }
+        if ProcessInfo.processInfo.arguments.contains("--location-audit") {
+            UserDefaults.standard.set(UserDefaults.standard.integer(forKey: "locationAudit." + source) + 1,
+                forKey: "locationAudit." + source)
+        }
+        let now = Date()
+        let fix = PhoneLocationFix(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
+            accuracy: location.horizontalAccuracy, time: location.timestamp)
+        if ProcessInfo.processInfo.arguments.contains("--location-audit") {
+            UserDefaults.standard.set(["age": now.timeIntervalSince(fix.time), "accuracy": fix.accuracy,
+                "latitude": fix.latitude, "longitude": fix.longitude, "time": fix.time.timeIntervalSince1970], forKey: "locationAudit.mapInput")
+        }
+        guard SystemMapBridge.canQueue(fix, at: now) else { return }
+        mapFixes.append(fix)
+        mapFixes = Array(mapFixes.filter { SystemMapBridge.canQueue($0, at: now) }.suffix(40))
+        matchSystemMap(at: now)
+    }
+    private func matchSystemMap(at now: Date) {
+        if ProcessInfo.processInfo.arguments.contains("--location-audit") {
+            let gap = mapFixes.last.flatMap { m in phoneFixes.map { abs($0.time.timeIntervalSince(m.time)) }.min() } ?? -1
+            UserDefaults.standard.set(["phoneCount": Double(phoneFixes.count), "mapCount": Double(mapFixes.count),
+                "nearestTimeGap": gap], forKey: "locationAudit.pairing")
+        }
+        for map in mapFixes.reversed() {
+            guard let phone = phoneFixes.min(by: { abs($0.time.timeIntervalSince(map.time)) < abs($1.time.timeIntervalSince(map.time)) }),
+                  let bridge = SystemMapBridge.pair(phone: phone, map: map, at: now) else { continue }
+            if let old = systemMapBridge, old.map.time >= bridge.map.time { return }
+            systemMapBridge = bridge
+            if let data = try? JSONEncoder().encode(bridge) { UserDefaults.standard.set(data, forKey: key + ".mapBridge") }
+            // Complete a recent record without changing its raw phone coordinates or sighting time.
+            if var record = lastPlace, record.mapLatitude == nil,
+               abs(record.locationTime.timeIntervalSince(phone.time)) <= 10,
+               let point = bridge.coordinate(latitude: record.latitude, longitude: record.longitude, at: now) {
+                record.mapLatitude = point.0; record.mapLongitude = point.1; record.mapSource = "paired-system-map"
+                lastPlace = record
+                if let data = try? JSONEncoder().encode(record) { UserDefaults.standard.set(data, forKey: key) }
+            }
+            return
+        }
+    }
+    func confirmRenderedCoordinate(expected: CLLocationCoordinate2D, actual: CLLocationCoordinate2D) {
+        let difference = PlaceGeometry.distance(expected.latitude, expected.longitude, actual.latitude, actual.longitude)
+        guard difference.isFinite else { return }
+        if renderedDifference != difference { renderedDifference = difference }
+        UserDefaults.standard.set(["differenceMeters": difference, "time": Date().timeIntervalSince1970], forKey: key + ".renderAudit")
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         window.reset()
@@ -246,6 +318,13 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         if let manualReference { return displayRecord(manualReference) }
         return lastPlace
     }
+    func calibrationCoordinate(_ reference: LastPlaceRecord) -> CLLocationCoordinate2D {
+        guard reference.accuracy > 0, reference.accuracy <= 20 else { return reference.coordinate }
+        let point = alignment?.corrected(deviceID: deviceID, latitude: reference.latitude, longitude: reference.longitude)
+            ?? systemMapBridge?.coordinate(latitude: reference.latitude, longitude: reference.longitude, at: Date())
+        if let point { return CLLocationCoordinate2D(latitude: point.0, longitude: point.1) }
+        return reference.coordinate
+    }
     func calibrateMap(_ reference: LastPlaceRecord, selected: CLLocationCoordinate2D, note: String) -> Bool {
         guard reference.deviceID == deviceID, reference.isValid,
               PlaceGeometry.valid(selected.latitude, selected.longitude), reference.signalTime <= Date() else {
@@ -264,7 +343,7 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
            (0...3).contains(reference.signalTime.timeIntervalSince(reference.locationTime)),
            PlaceGeometry.distance(reference.latitude, reference.longitude, selected.latitude, selected.longitude) <= 2000 {
             let correction = PlaceDisplayAlignment(deviceID: deviceID, latitude: reference.latitude,
-                longitude: reference.longitude, targetLatitude: selected.latitude, targetLongitude: selected.longitude)
+                longitude: reference.longitude, targetLatitude: selected.latitude, targetLongitude: selected.longitude, version: 2)
             alignment = correction
             if let data = try? JSONEncoder().encode(correction) { UserDefaults.standard.set(data, forKey: key + ".correction") }
         }
@@ -289,24 +368,40 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
             accuracy: 0, locationTime: reference.signalTime, signalTime: reference.signalTime,
             rssi: reference.rssi, source: reference.source, qualityVersion: 3)
     }
+    private func mappedRecord(_ raw: LastPlaceRecord, point: (Double, Double), manual: Bool = false) -> LastPlaceRecord {
+        LastPlaceRecord(deviceID: raw.deviceID, latitude: point.0, longitude: point.1,
+            accuracy: manual ? 0 : raw.accuracy, locationTime: raw.locationTime, signalTime: raw.signalTime,
+            rssi: raw.rssi, source: raw.source, qualityVersion: raw.qualityVersion)
+    }
     var displayedPlace: LastPlaceRecord? {
         if let raw = lastPlace {
+            // Manual correction already maps RAW -> selected map point. Never stack it on a system map shift.
             if let point = alignment?.corrected(deviceID: deviceID, latitude: raw.latitude, longitude: raw.longitude) {
-                return LastPlaceRecord(deviceID: raw.deviceID, latitude: point.0, longitude: point.1,
-                    accuracy: raw.accuracy, locationTime: raw.locationTime, signalTime: raw.signalTime,
-                    rssi: raw.rssi, source: raw.source, qualityVersion: raw.qualityVersion)
+                return mappedRecord(raw, point: point, manual: true)
             }
-            if let manualReference, manualReference.signalTime >= raw.signalTime { return displayRecord(manualReference) }
-            return raw
+            if let lat = raw.mapLatitude, let lon = raw.mapLongitude, PlaceGeometry.valid(lat, lon) {
+                return mappedRecord(raw, point: (lat, lon))
+            }
+            if let point = systemMapBridge?.coordinate(latitude: raw.latitude, longitude: raw.longitude, at: Date()) {
+                return mappedRecord(raw, point: point)
+            }
+            // An unverified raw point must not be plotted on a possibly different map coordinate system.
+            return nil
         }
         return manualReference.map { displayRecord($0) }
     }
     var displayLabel: String {
         if let raw = lastPlace, alignment?.corrected(deviceID: deviceID, latitude: raw.latitude, longitude: raw.longitude) != nil {
-            return "自动记录 · 已按手动参考对齐"
+            return "自动记录 · 手动对齐"
         }
-        if let manualReference, lastPlace == nil || manualReference.signalTime >= lastPlace!.signalTime { return "手动确认的参考位置" }
-        return alignment == nil ? "自动记录的手机位置" : "已离开对齐区域 · 使用系统位置"
+        if lastPlace == nil && manualReference != nil { return "手动确认的历史参考" }
+        return "自动记录 · 已匹配系统地图"
+    }
+    var coordinateCheckSummary: String {
+        if let bridge = systemMapBridge {
+            return "系统定位与地图显示坐标差约 \(Int(bridge.offset.rounded())) 米；已按同机同期数据匹配，不是 GPS 精度提升。"
+        }
+        return "等待系统地图与手机定位匹配；原始记录保留，暂不绘制未经匹配的位置。"
     }
     func openMap(manual: Bool = false) {
         let place: LastPlaceRecord?

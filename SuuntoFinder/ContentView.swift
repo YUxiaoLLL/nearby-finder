@@ -33,7 +33,7 @@ struct ContentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Button(model.running ? "暂停信号寻找" : "开始寻找") { model.running ? model.stop() : model.start() }
                     if !model.rssiError.isEmpty { Text(model.rssiError).font(.caption).foregroundStyle(.orange) }
-                } header: { Text("随手寻 · V0.11（开发版）") }
+                } header: { Text("随手寻 · V0.12（开发版）") }
                 Section {
                     Button { showLibrary = true } label: { Label("我的设备", systemImage: "square.grid.2x2") }
                     Button {
@@ -175,14 +175,16 @@ private struct LastPlaceSection: View {
             } else { Text("尚未收到有效信号").foregroundStyle(.secondary) }
 
             if let place = controller.displayedPlace {
-                LastPlaceMap(place: place, manual: place.accuracy == 0)
+                LastPlaceMap(place: place, manual: place.accuracy == 0, verify: { expected, actual in
+                    controller.confirmRenderedCoordinate(expected: expected, actual: actual)
+                })
                     .frame(height: 190).clipShape(RoundedRectangle(cornerRadius: 12))
                 Text(controller.displayLabel).font(.subheadline)
-                Text(place.signalTime, format: .dateTime.month().day().hour().minute())
+                Text("位置记录：\(place.signalTime.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("在地图中查看") { controller.openMap() }
             } else {
-                Text("正在等待手机定位，收到设备信号后自动记录。")
+                Text("正在匹配手机定位与系统地图，收到信号后自动记录。")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             Button { mapToCalibrate = controller.calibrationReference } label: {
@@ -201,10 +203,23 @@ private struct LastPlaceSection: View {
                 if let raw = controller.lastPlace {
                     Text("系统报告范围约 \(Int(ceil(raw.accuracy))) 米，不是实际误差保证。")
                         .font(.caption).foregroundStyle(.secondary)
-                    LastPlaceMap(place: raw).frame(height: 170)
-                    Text("上图为未校正的系统原始位置").font(.caption)
+                    Text(controller.coordinateCheckSummary).font(.caption)
+                    if let delta = controller.renderedDifference {
+                        Text("传入地图 → 标记坐标差：\(delta, specifier: "%.2f") 米").font(.caption)
+                    }
+                    DisclosureGroup("查看本机坐标核验") {
+                        Text("原始定位：\(raw.latitude, specifier: "%.6f"), \(raw.longitude, specifier: "%.6f")")
+                        if let shown = controller.displayedPlace {
+                            Text("地图输入：\(shown.latitude, specifier: "%.6f"), \(shown.longitude, specifier: "%.6f")")
+                        }
+                        Text("定位与信号相差 \(abs(raw.signalTime.timeIntervalSince(raw.locationTime)), specifier: "%.2f") 秒")
+                        Text("原始坐标按系统回调原样保存；地图坐标单独保存，仅在本机核验。")
+                    }.font(.caption)
                 }
-                if controller.manualReference != nil {
+                if let history = controller.manualReference {
+                    Text("历史手动确认：\(history.confirmedAt.formatted(date: .abbreviated, time: .shortened))").font(.caption)
+                    if !history.note.isEmpty { Text(history.note).font(.caption) }
+                    Button("查看历史手动参考") { controller.openMap(manual: true) }
                     Button("撤销手动对齐") { controller.resetMapCalibration() }
                 }
                 if controller.enabled { Button("关闭自动位置记录") { controller.disable() } }
@@ -216,7 +231,7 @@ private struct LastPlaceSection: View {
                 if controller.lastPlace != nil || controller.manualReference != nil {
                     Button("删除此物品的全部位置参考", role: .destructive) { confirmClear = true }
                 }
-                Text("自动定位只在前台寻找时采样。原始位置和手动对齐分别保存。对齐仅影响原点附近 500 米内的地图显示，不提升 GPS 测量精度；离开后使用系统位置。")
+                Text("自动定位只在前台寻找时采样。原始定位与匹配后的地图坐标分开保存。系统匹配和手动对齐不会叠加；旧版未经核验的手动偏移已停用，历史确认仍保留。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         } header: { Text("最后信号与位置参考") }
@@ -232,6 +247,7 @@ private struct LastPlaceSection: View {
 private struct LastPlaceMap: UIViewRepresentable {
     let place: LastPlaceRecord
     var manual = false
+    var verify: ((CLLocationCoordinate2D, CLLocationCoordinate2D) -> Void)? = nil
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator; map.isUserInteractionEnabled = false
@@ -246,6 +262,8 @@ private struct LastPlaceMap: UIViewRepresentable {
         let pin = MKPointAnnotation(); pin.coordinate = place.coordinate
         pin.title = manual ? "手动确认的参考位置" : "手机曾在此附近"
         map.addAnnotation(pin)
+        let expected = place.coordinate, actual = pin.coordinate
+        DispatchQueue.main.async { verify?(expected, actual) }
         if !manual { map.addOverlay(MKCircle(center: place.coordinate, radius: max(1, place.accuracy))) }
         let width = manual ? 250 : max(150, place.accuracy * 4)
         map.setRegion(MKCoordinateRegion(center: place.coordinate, latitudinalMeters: width, longitudinalMeters: width), animated: false)
@@ -353,7 +371,7 @@ private struct MapCalibrationView: View {
         _note = State(initialValue: controller.manualReference?.signalTime == place.signalTime ? controller.manualReference?.note ?? "" : "")
         _region = State(initialValue: place.accuracy >= 10000
             ? MKCoordinateRegion(center: place.coordinate, span: MKCoordinateSpan(latitudeDelta: 120, longitudeDelta: 180))
-            : MKCoordinateRegion(center: place.coordinate, latitudinalMeters: 1200, longitudinalMeters: 1200))
+            : MKCoordinateRegion(center: controller.calibrationCoordinate(place), latitudinalMeters: 1200, longitudinalMeters: 1200))
     }
     var body: some View {
         NavigationStack {
@@ -412,6 +430,69 @@ private struct MapCalibrationView: View {
                 results = Array(response.mapItems.prefix(5))
                 searchStatus = results.isEmpty ? "未找到地点，请换一个更具体的地址" : "选择结果后仍需拖动地图并亲自确认"
             } catch { searchStatus = "地图搜索暂不可用，仍可手动拖动地图" }
+        }
+    }
+}
+
+// Explicit developer launch mode; coordinates stay in this app's local container.
+struct LocationAuditMap: UIViewRepresentable {
+    @ObservedObject var controller: LastPlaceController
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView(); map.delegate = context.coordinator
+        map.showsUserLocation = true; map.userTrackingMode = .follow
+        return map
+    }
+    func updateUIView(_ map: MKMapView, context: Context) {
+        guard let shown = controller.displayedPlace else { return }
+        map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
+        let pin = MKPointAnnotation(); pin.coordinate = shown.coordinate; pin.title = "自动记录位置"
+        map.addAnnotation(pin)
+        let expected = shown.coordinate, actual = pin.coordinate
+        DispatchQueue.main.async {
+            controller.confirmRenderedCoordinate(expected: expected, actual: actual)
+            UserDefaults.standard.set(["latitude": actual.latitude, "longitude": actual.longitude,
+                "time": Date().timeIntervalSince1970], forKey: "locationAudit.finalPin")
+        }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(controller) }
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        weak var controller: LastPlaceController?
+        init(_ controller: LastPlaceController) { self.controller = controller }
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard let location = userLocation.location else { return }
+            controller?.observeSystemMap(location, source: "visible-audit")
+            UserDefaults.standard.set(["latitude": location.coordinate.latitude, "longitude": location.coordinate.longitude,
+                "accuracy": location.horizontalAccuracy, "time": location.timestamp.timeIntervalSince1970,
+                "annotationLatitude": userLocation.coordinate.latitude, "annotationLongitude": userLocation.coordinate.longitude], forKey: "locationAudit.map")
+            if let view = mapView.view(for: userLocation) {
+                let visible = mapView.convert(view.center, toCoordinateFrom: mapView)
+                UserDefaults.standard.set(["latitude": visible.latitude, "longitude": visible.longitude,
+                    "time": Date().timeIntervalSince1970], forKey: "locationAudit.visible")
+            }
+        }
+    }
+}
+
+/// A visible-window MapKit source matches the coordinate space used by the actual system map.
+/// It is active only during an authorized foreground search, never as background tracking.
+struct SystemLocationMapProbe: UIViewRepresentable {
+    @ObservedObject var controller: LastPlaceController
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView(); map.delegate = context.coordinator
+        map.isUserInteractionEnabled = false
+        map.showsUserLocation = controller.shouldMatchSystemMap
+        return map
+    }
+    func updateUIView(_ map: MKMapView, context: Context) {
+        map.showsUserLocation = controller.shouldMatchSystemMap
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(controller) }
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        weak var controller: LastPlaceController?
+        init(_ controller: LastPlaceController) { self.controller = controller }
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard let location = userLocation.location else { return }
+            controller?.observeSystemMap(location)
         }
     }
 }
