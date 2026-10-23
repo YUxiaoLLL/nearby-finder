@@ -8,8 +8,8 @@
 <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
 <key>CFBundleDisplayName</key><string>随手寻</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.12.0</string>
-<key>CFBundleVersion</key><string>10</string>
+<key>CFBundleShortVersionString</key><string>0.13.0</string>
+<key>CFBundleVersion</key><string>11</string>
 <key>LSRequiresIPhoneOS</key><true/>
 <key>NSBluetoothAlwaysUsageDescription</key><string>扫描并尝试连接你确认拥有的蓝牙设备，通过信号强弱辅助寻找；不同设备支持能力有所不同。</string>
 <key>NSLocationWhenInUseUsageDescription</key><string>在前台寻找自有物品时，保存收到有效信号时手机的位置参考，作为寻找起点。记录仅保存在本机；不代表物品自身的位置。</string>

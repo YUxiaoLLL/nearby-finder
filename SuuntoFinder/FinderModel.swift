@@ -97,7 +97,7 @@ final class FinderModel: NSObject, ObservableObject, CBCentralManagerDelegate, C
         // All model mutations and delegate callbacks use the main queue.
         central = CBCentralManager(delegate: self, queue: .main)
         clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        record("launch", ["version":"0.12-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
+        record("launch", ["version":"0.13-native", "savedTarget":defaults.string(forKey:"targetID") ?? "none"])
     }
 
     func record(_ event: String, _ data: [String: Any] = [:]) {
@@ -123,6 +123,12 @@ final class FinderModel: NSObject, ObservableObject, CBCentralManagerDelegate, C
             signal.reset(); connection = "系统蓝牙不可用"
             status = "请在 iPhone 设置中检查蓝牙与本 App 权限；程序无法替你切换系统蓝牙"
         }
+    }
+    private var initialPresentationHandled = false
+    func startFromInitialPresentation() {
+        guard !initialPresentationHandled else { return }
+        initialPresentationHandled = true
+        if !running { start() }
     }
     func start() {
         stop(cancelSoundTests: false)

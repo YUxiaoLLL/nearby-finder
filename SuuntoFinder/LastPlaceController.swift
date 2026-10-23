@@ -408,7 +408,7 @@ final class LastPlaceController: NSObject, ObservableObject, CLLocationManagerDe
         if manual, let reference = manualReference { place = displayRecord(reference) } else { place = displayedPlace }
         guard let place else { return }
         let item = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
-        item.name = manual ? "手动确认的手机位置参考" : "收到物品信号时的手机位置（非物品坐标）"
+        item.name = T(manual ? "手动确认的手机位置参考" : "收到物品信号时的手机位置（非物品坐标）")
         item.openInMaps(launchOptions: nil)
     }
 }

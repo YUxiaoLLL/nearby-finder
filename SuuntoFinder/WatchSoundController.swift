@@ -90,8 +90,8 @@ final class WatchSoundController: NSObject, ObservableObject, UNUserNotification
             let id = "finder-watch-\(UUID().uuidString)"
             ids.insert(id)
             let content = UNMutableNotificationContent()
-            content.title = "寻找 Suunto · \(index + 1)/4"
-            content.body = "请听手表的提示音。找到后返回 App 停止提醒。"
+            content.title = T("寻找 Suunto · \(index + 1)/4")
+            content.body = T("请听手表的提示音。找到后返回 App 停止提醒。")
             content.sound = .default
             content.threadIdentifier = "suunto-finder-sound"
             let request = UNNotificationRequest(identifier: id, content: content,
