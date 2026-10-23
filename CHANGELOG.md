@@ -1,5 +1,24 @@
 # Changelog
 
+## V0.13 — English / Simplified Chinese
+
+- Add a top-left globe menu with English and Simplified Chinese choices, applied immediately and remembered across launches. Initial language follows supported iOS language preferences.
+- Translate live signal/connection states, device categories, watch alert controls, location details, guides and newly scheduled notifications. Format in-app dates using the selected locale.
+- Preserve device identities, categories in storage, user nicknames/notes and raw diagnostic evidence. Existing scheduled notifications retain their original text; system dialogs and map labels follow iOS/provider settings.
+- Keep the finder model alive across language changes and prevent a language change from restarting a paused search.
+- Add regression coverage for saved-language resolution, dynamic values, localized enum labels, translation placeholder parity and user-text preservation.
+
+
+## V0.12 — verified system-map coordinate pipeline
+
+- A physical iPhone investigation found a roughly 626m difference between Core Location and MapKit location coordinates in the tested map environment. Raw callback values were preserved; plotting them directly mixed coordinate spaces.
+- Match public same-phone Core Location and MapKit samples with bounded time/accuracy checks; preserve raw and map coordinates separately. No guessed global coordinate conversion or location upload is used.
+- Queue slightly predictive MapKit timestamps for up to two seconds, but pair them only after their timestamp has arrived. Signal/location timing checks remain unchanged.
+- Retire unverified V0.11 manual offsets without deleting historical confirmations; do not stack manual and system map corrections.
+- Add local coordinate and actual annotation checks, replacing the misleading second raw-coordinate map.
+- Verified on a physical iPhone in the normal UI: matching samples, automatic map-coordinate persistence, and zero stored-map-to-annotation coordinate difference. This verifies software consistency, not absolute GPS accuracy.
+
+
 ## V0.11 — automatic location and local alignment
 
 - Show one primary location map; keep raw evidence and controls in details.

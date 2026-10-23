@@ -7,7 +7,7 @@ if ! xcrun --find swift >/dev/null 2>&1 || ! xcodebuild -version >/dev/null 2>&1
 fi
 check_file=$(mktemp -t SuuntoSignalChecks)
 trap 'rm -f "$check_file"' EXIT
-cat SuuntoFinder/SignalWindow.swift SuuntoFinder/SignalGuideController.swift SuuntoFinder/DeviceLibrary.swift Checks/SignalWindowChecks.swift > "$check_file"
+cat SuuntoFinder/AppLanguage.swift SuuntoFinder/SignalWindow.swift SuuntoFinder/SignalGuideController.swift SuuntoFinder/DeviceLibrary.swift Checks/SignalWindowChecks.swift > "$check_file"
 swift_check_file="${check_file}.swift"
 mv "$check_file" "$swift_check_file"
 trap 'rm -f "$swift_check_file"' EXIT
