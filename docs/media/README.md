@@ -1,13 +1,9 @@
-# Real-device demo / 真实设备演示
+# Demo video / 演示视频
 
-Video pending; no placeholder video or simulated recovery is presented as real. / 等待作者录制，不以模拟画面冒充实测。
+[Watch the 37-second demo / 观看 37 秒演示短片](https://github.com/YUxiaoLLL/nearby-finder/releases/tag/v0.13.0-demo)
 
-建议录制 / Suggested sequence:
-1. Show the tested model and version, hide the watch in a controlled setup. / 展示型号版本，标明受控藏表。
-2. Show continuous phone capture while walking, pausing and observing trends. / 连续展示移动、停顿和趋势。
-3. Trigger notifications, keep original audio, retrieve the watch. / 触发提醒，保留原声，取出手表。
-4. State limitations and notification settings. / 说明权限设置和限制。
+https://github.com/user-attachments/assets/0dbb8536-87fe-4830-b5bb-5baf6e228b49
 
-Hide serial numbers, Bluetooth UUIDs, personal notifications, map coordinates and home-identifying details. Do not remove failed attempts in a way that misrepresents reliability. / 遮蔽序列号、标识、私人通知、位置和家庭细节；不通过剪辑夸大成功率。
+Edited demonstration supplied by the author: English interface, Bluetooth signal search and notification-assisted watch alerts. This is not a continuous recovery test or a compatibility guarantee. / 作者制作的剪辑演示，展示英文界面、信号寻找和通知辅助响铃；不作为连续找回测试或全型号兼容保证。
 
-After recording, upload the video to a GitHub issue/editor attachment or a video platform and add the actual link in both READMEs. Keep large video binaries out of Git history. / 录制后用附件或视频平台链接，在两个 README 同时更新，避免将大视频写入 Git 历史。
+The web copy preserves the full approximately 37-second sequence, compressed for GitHub playback. The original 1080 × 1920 video remains local; large binaries and raw footage are kept out of Git history. / 网页版保留约 37 秒完整内容，为 GitHub 播放压缩；1080 × 1920 原片及原始素材保留本地，不进入 Git 历史。
