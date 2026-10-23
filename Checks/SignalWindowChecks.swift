@@ -279,3 +279,40 @@ func checkAutomaticDisplayAlignment() {
     print("PASS: immediate fresh automatic fixes, persistent jump protection, local correction persistence/movement/device isolation")
 }
 checkAutomaticDisplayAlignment()
+
+func checkSystemMapBridge() {
+    let t = Date(timeIntervalSince1970: 20000)
+    let phone = PhoneLocationFix(latitude: 23, longitude: 113, accuracy: 8, time: t)
+    let map = PhoneLocationFix(latitude: 22.9975, longitude: 113.005, accuracy: 8, time: t)
+    let bridge = SystemMapBridge.pair(phone: phone, map: map, at: t)!
+    let restored = try! JSONDecoder().decode(SystemMapBridge.self, from: JSONEncoder().encode(bridge))
+    let point = restored.coordinate(latitude: 23.0001, longitude: 113.0001, at: t.addingTimeInterval(10))!
+    assert(abs(point.0 - 22.9976) < 0.0000001 && abs(point.1 - 113.0051) < 0.0000001)
+    assert(phone.latitude == 23 && phone.longitude == 113) // raw source remains unchanged
+    assert(bridge.coordinate(latitude: 24, longitude: 113, at: t) == nil)
+    assert(bridge.coordinate(latitude: 23, longitude: 113, at: t.addingTimeInterval(3601)) == nil)
+    let late = PhoneLocationFix(latitude: map.latitude, longitude: map.longitude, accuracy: 8, time: t.addingTimeInterval(2))
+    assert(SystemMapBridge.pair(phone: phone, map: late, at: late.time) == nil)
+    assert(SystemMapBridge.pair(phone: phone, map: map, at: t.addingTimeInterval(11)) == nil)
+    let coarse = PhoneLocationFix(latitude: map.latitude, longitude: map.longitude, accuracy: 100, time: t)
+    assert(SystemMapBridge.pair(phone: phone, map: coarse, at: t) == nil)
+    let identity = SystemMapBridge.pair(phone: phone, map: phone, at: t)!
+    assert(identity.offset == 0 && identity.coordinate(latitude: 23, longitude: 113, at: t)!.0 == 23)
+    print("PASS: paired system-map provenance, matching time/accuracy, raw preservation, identity mapping, regional/age limits")
+}
+checkSystemMapBridge()
+
+func checkPredictiveMapTimestamp() {
+    let t = Date(timeIntervalSince1970: 30000)
+    let phone = PhoneLocationFix(latitude: 23, longitude: 113, accuracy: 8, time: t)
+    let predictive = PhoneLocationFix(latitude: 22.9975, longitude: 113.005, accuracy: 8, time: t.addingTimeInterval(1.1))
+    assert(SystemMapBridge.canQueue(predictive, at: t))
+    assert(SystemMapBridge.pair(phone: phone, map: predictive, at: t) == nil)
+    let nextPhone = PhoneLocationFix(latitude: 23, longitude: 113, accuracy: 8, time: t.addingTimeInterval(1))
+    assert(SystemMapBridge.pair(phone: nextPhone, map: predictive, at: t.addingTimeInterval(1.2)) != nil)
+    let future = PhoneLocationFix(latitude: 23, longitude: 113, accuracy: 8, time: t.addingTimeInterval(3))
+    assert(!SystemMapBridge.canQueue(future, at: t))
+    assert(!SystemMapBridge.canQueue(phone, at: t.addingTimeInterval(21)))
+    print("PASS: predictive MapKit callbacks are queued, never paired before their timestamp, then matched to a contemporaneous phone fix")
+}
+checkPredictiveMapTimestamp()
