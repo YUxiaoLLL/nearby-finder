@@ -316,3 +316,30 @@ func checkPredictiveMapTimestamp() {
     print("PASS: predictive MapKit callbacks are queued, never paired before their timestamp, then matched to a contemporaneous phone fix")
 }
 checkPredictiveMapTimestamp()
+
+func checkBilingualUI() {
+    assert(AppLanguage.resolve(saved: "en", preferred: ["zh-Hans"]) == .english)
+    assert(AppLanguage.resolve(saved: "zh-Hans", preferred: ["en-US"]) == .chinese)
+    assert(AppLanguage.resolve(saved: nil, preferred: ["fr", "en-GB"]) == .english)
+    assert(AppLanguage.resolve(saved: "invalid", preferred: ["zh-Hant"]) == .chinese)
+    let en = AppLanguage.english, zh = AppLanguage.chinese
+    assert(AppTranslation.text("寻找设备", language: en) == "Find device")
+    assert(AppTranslation.text("寻找设备", language: zh) == "寻找设备")
+    assert(AppTranslation.text("正在提醒 · 剩余约 15 秒", language: en) == "Alerts active · About 15s left")
+    assert(AppTranslation.text("记录左侧采样点", language: en) == "Record Left sample")
+    assert(AppTranslation.text("通知提醒：测试后未响应", language: en) == "Notification alerts: No response in my test")
+    assert(AppTranslation.text("原始定位：23.000001, 113.000001", language: en) == "Raw location: 23.000001, 113.000001")
+    assert(AppTranslation.text("常放：左侧", language: en) == "Usually kept: 左侧") // never translate user notes
+    assert(AppTranslation.text("常放：my {0} drawer 👟", language: en) == "Usually kept: my {0} drawer 👟")
+    assert(AppTranslation.text("张三的手表 👟", language: en) == "张三的手表 👟")
+    let slot = try! NSRegularExpression(pattern: #"\{\d+\}"#)
+    for (key, value) in AppTranslation.english {
+        func slots(_ s: String) -> [String] {
+            slot.matches(in: s, range: NSRange(s.startIndex..., in: s)).compactMap { Range($0.range, in: s).map { String(s[$0]) } }.sorted()
+        }
+        assert(slots(key) == slots(value), "Translation placeholders differ: \(key)")
+    }
+    assert(DeviceKind.watch.rawValue == "手表／手环") // persisted identities do not change with UI language
+    print("PASS: language preference resolution, instant bilingual text, dynamic values, enum labels, user-note preservation and complete placeholder parity")
+}
+checkBilingualUI()
